@@ -16,6 +16,7 @@ export default function RoomPage() {
   const [room, setRoom] = useState(null);
   const [players, setPlayers] = useState([]);
   const [isHost, setIsHost] = useState(false);
+  const [myToken, setMyToken] = useState('');   // this device's session token
   const [toast, setToast] = useState({msg:'',v:false});
   const show = m => { setToast({msg:m,v:true}); setTimeout(()=>setToast(t=>({...t,v:false})),2500); };
 
@@ -34,33 +35,44 @@ export default function RoomPage() {
 
   // ── Swiping ──
   const [movieIdx, setMovieIdx] = useState(0);
-  const [currentPI, setCurrentPI] = useState(0);
 
   // ── Results ──
   const [resultTab, setResultTab] = useState('matches');
   const [resultData, setResultData] = useState(null);
   const [showConf, setShowConf] = useState(false);
 
-  // ── When content type changes, reset category to first valid one ──
+  // ── When content type changes, reset category ──
   useEffect(() => {
     const cats = getCategoriesForType(contentType);
-    if (!cats.find(c => c.id === category)) {
-      setCategory(cats[0].id);
-    }
+    if (!cats.find(c => c.id === category)) setCategory(cats[0].id);
     setContentLoaded(false);
     setContent([]);
   }, [contentType]);
 
-  // Also reset loaded state when category/genre/platforms change
-  useEffect(() => {
-    setContentLoaded(false);
-  }, [category, genre, platforms]);
+  useEffect(() => { setContentLoaded(false); }, [category, genre, platforms]);
+
+  // ── Fetch content using room params ──
+  const fetchContentForRoom = useCallback(async (type, cat, gen, plats) => {
+    setContentLoading(true);
+    try {
+      const params = new URLSearchParams({ type, category: cat, genre: gen, platforms: (plats||[]).join(',') });
+      const r = await fetch(`/api/tmdb?${params}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setContent(d.results || []);
+      setContentLoaded(true);
+    } catch (err) { show('Failed to load content'); }
+    setContentLoading(false);
+  }, []);
 
   // ── Init ──
   useEffect(() => {
     (async () => {
       const host = localStorage.getItem('fp_host') === 'true';
+      const token = localStorage.getItem('fp_session') || '';
       setIsHost(host);
+      setMyToken(token);
+
       const { data: r } = await supabase.from('rooms').select('*').eq('code', code.toUpperCase()).single();
       if (!r) { router.push('/'); return; }
       setRoom(r);
@@ -68,13 +80,45 @@ export default function RoomPage() {
       if (r.genre_filter) setGenre(r.genre_filter);
       if (r.content_type) setContentType(r.content_type);
       if (r.content_category) setCategory(r.content_category);
+
       const { data: ps } = await supabase.from('players').select('*').eq('room_id', r.id).order('player_order');
       setPlayers(ps || []);
-      if (r.status === 'lobby') setScreen(host ? 'lobby' : 'waiting');
-      else if (r.status === 'results') { fetchResults(); setScreen('results'); }
-      else setScreen(host ? 'lobby' : 'waiting');
+
+      if (r.status === 'lobby') {
+        setScreen(host ? 'lobby' : 'waiting');
+      } else if (r.status === 'results') {
+        fetchResults();
+        setScreen('results');
+      } else if (r.status === 'swiping') {
+        // Rejoining a game in progress — load content and go to swiping
+        await fetchContentForRoom(r.content_type||'all', r.content_category||'trending', r.genre_filter||'All', r.platforms||[]);
+        setMovieIdx(0);
+        setScreen('swiping');
+      }
     })();
   }, [code, router]);
+
+  // ── React to room status changes (for non-hosts waiting) ──
+  useEffect(() => {
+    if (!room || isHost) return;
+    if (room.status === 'swiping' && screen === 'waiting') {
+      (async () => {
+        await fetchContentForRoom(
+          room.content_type||'all',
+          room.content_category||'trending',
+          room.genre_filter||'All',
+          room.platforms||[]
+        );
+        setMovieIdx(0);
+        setScreen('swiping');
+      })();
+    }
+    if (room.status === 'results' && screen !== 'results') {
+      fetchResults();
+      setScreen('results');
+      setShowConf(true);
+    }
+  }, [room?.status]);
 
   // ── Realtime ──
   useEffect(() => {
@@ -84,17 +128,18 @@ export default function RoomPage() {
         if (p.eventType==='INSERT') {
           setPlayers(prev => [...prev.filter(x=>x.id!==p.new.id), p.new].sort((a,b)=>a.player_order-b.player_order));
           show(`${p.new.name} joined! ${p.new.avatar}`);
-        } else if (p.eventType==='UPDATE') setPlayers(prev => prev.map(x=>x.id===p.new.id?p.new:x));
+        } else if (p.eventType==='UPDATE') {
+          setPlayers(prev => prev.map(x=>x.id===p.new.id?p.new:x));
+        }
       })
       .on('postgres_changes', { event:'UPDATE', schema:'public', table:'rooms', filter:`id=eq.${room.id}` }, p => {
-        setRoom(p.new);
-        if (p.new.status==='results') { fetchResults(); setScreen('results'); setShowConf(true); }
+        setRoom(p.new); // triggers the useEffect above for screen transitions
       })
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [room]);
 
-  // ── Load content from TMDB ──
+  // ── Load content (lobby) ──
   const loadContent = useCallback(async () => {
     setContentLoading(true);
     try {
@@ -131,29 +176,31 @@ export default function RoomPage() {
     } catch(e){show(e.message);}
   };
 
-  // ── Start swiping ──
+  // ── Start swiping (host only) ──
   const startSwiping = async () => {
     if(content.length===0){show('Load content first');return;}
     await fetch(`/api/results/${code}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'swiping',platforms,genre_filter:genre,content_type:contentType,content_category:category})});
-    setMovieIdx(0); setCurrentPI(0); setScreen('swiping');
+    setMovieIdx(0);
+    setScreen('swiping');
   };
 
-  // ── Swipe handler ──
-  const handleSwipe = async dir => {
-    const item = content[movieIdx]; if(!item) return;
-    const cp = players[currentPI]; if(!cp) return;
-    fetch('/api/swipe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionToken:cp.session_token,contentId:item.id,contentType:item.type,liked:dir==='right'})});
-    if (movieIdx+1<content.length) setMovieIdx(p=>p+1);
-    else {
-      fetch('/api/swipe',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionToken:cp.session_token})});
-      if(currentPI+1<players.length){setCurrentPI(p=>p+1);setMovieIdx(0);setScreen('handoff');}
-      else setScreen('orgReveal');
+  // ── Swipe handler — each device swipes as its own player ──
+  const handleSwipe = dir => {
+    const item = content[movieIdx]; if (!item) return;
+    const token = myToken || localStorage.getItem('fp_session') || '';
+    // Fire-and-forget — don't await, keeps swiping instant
+    fetch('/api/swipe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionToken:token,contentId:item.id,contentType:item.type,liked:dir==='right'})});
+    if (movieIdx + 1 < content.length) {
+      setMovieIdx(p => p + 1);
+    } else {
+      // Mark this player as done
+      fetch('/api/swipe',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionToken:token})});
+      setScreen('orgReveal');
     }
   };
 
-  // ── Reveal ──
+  // ── Reveal results (host only) ──
   const revealResults = async () => {
-    // Save watch history for logged-in host
     const { data:{user} } = await supabase.auth.getUser();
     let historyEntries = [];
     if (user && resultData) {
@@ -170,6 +217,7 @@ export default function RoomPage() {
     await fetchResults(); setShowConf(true); setScreen('results');
   };
 
+  const myPlayer = players.find(p => p.session_token === myToken) || players[0];
   const progress = content.length>0?(movieIdx/content.length)*100:0;
   const movieCount = content.filter(c=>c.type==='movie').length;
   const seriesCount = content.filter(c=>c.type==='series').length;
@@ -192,6 +240,14 @@ export default function RoomPage() {
       <div className="flex gap-2 mt-4 flex-wrap justify-center">{players.map(p=>(
         <div key={p.id} className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{background:`${p.color}22`,border:`2px solid ${p.color}44`}}>{p.avatar}</div><span className="text-white/30 text-[10px]">{p.name.slice(0,8)}</span></div>
       ))}</div>
+    </div>
+  </>);
+
+  // ── CONTENT LOADING (for non-hosts transitioning to swiping) ──
+  if (contentLoading) return (<><StarBG/>
+    <div className="relative z-10 min-h-screen flex flex-col items-center justify-center gap-4">
+      <div className="spinner"/>
+      <p className="text-white/40 text-sm">Loading content...</p>
     </div>
   </>);
 
@@ -230,11 +286,10 @@ export default function RoomPage() {
         }
       </div>
 
-      {/* ═══ 3. WHAT TO WATCH — Content Type Selector ═══ */}
+      {/* ═══ 3. WHAT TO WATCH ═══ */}
       <div className="w-full mb-5" style={{animation:'slideUp .5s ease .16s both'}}>
         <h3 className="text-[17px] font-extrabold mb-1" style={{fontFamily:"'Playfair Display',serif"}}>What does your group want?</h3>
         <p className="text-white/25 text-[12px] mb-3">Choose whether you're picking a movie, a web series, or both</p>
-
         <div className="flex flex-col gap-2">
           {CONTENT_TYPES.map(t => {
             const sel = contentType === t.id;
@@ -257,7 +312,7 @@ export default function RoomPage() {
         </div>
       </div>
 
-      {/* ═══ 4. CATEGORY — Changes based on content type ═══ */}
+      {/* ═══ 4. CATEGORY ═══ */}
       <div className="w-full mb-5" style={{animation:'slideUp .5s ease .2s both'}}>
         <h3 className="text-[16px] font-extrabold mb-1" style={{fontFamily:"'Playfair Display',serif"}}>
           {contentType==='movies'?'Movie Category':contentType==='series'?'Series Category':'Category'}
@@ -312,17 +367,13 @@ export default function RoomPage() {
             : `🔍 Load ${contentType==='movies'?'Movies':contentType==='series'?'Web Series':'Movies & Series'}`}
         </button>
 
-        {/* ── Preview of loaded content ── */}
         {contentLoaded && content.length > 0 && (
           <div className="mt-4 glass p-4" style={{animation:'slideUp .4s ease'}}>
-            {/* Stats bar */}
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <span className="text-green-500 text-[13px] font-bold">✓ {content.length} titles ready</span>
               {movieCount > 0 && <span className="type-badge-movie text-[10px] font-bold px-2 py-0.5 rounded-md">🍿 {movieCount} Movie{movieCount!==1?'s':''}</span>}
               {seriesCount > 0 && <span className="type-badge-series text-[10px] font-bold px-2 py-0.5 rounded-md">📺 {seriesCount} Series</span>}
             </div>
-
-            {/* Poster preview */}
             <div className="flex gap-2 overflow-x-auto pb-2" style={{scrollSnapType:'x mandatory'}}>
               {content.slice(0,10).map(c=>(
                 <div key={c.id} className="shrink-0 w-[72px]" style={{scrollSnapAlign:'start'}}>
@@ -357,49 +408,46 @@ export default function RoomPage() {
     <Toast msg={toast.msg} visible={toast.v}/>
   </>);
 
-  // ── HANDOFF ──
-  if (screen==='handoff') {
-    const next = players[currentPI]; if(!next) return null;
-    return (<><StarBG/><div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 max-w-[480px] mx-auto text-center" style={{animation:'slideUp .6s ease'}}>
-      <div className="w-[100px] h-[100px] rounded-3xl flex items-center justify-center text-[50px] mb-6" style={{background:`${next.color}22`,border:`3px solid ${next.color}55`,animation:'pulseGlow 2.5s ease-in-out infinite'}}>{next.avatar}</div>
-      <h2 className="text-3xl font-black mb-2" style={{fontFamily:"'Playfair Display',serif"}}>Pass to {next.name}</h2>
-      <p className="text-white/35 text-sm mb-1">Player {currentPI+1} of {players.length}</p>
-      <p className="text-white/20 text-[13px] mb-8">Don't peek! 👀</p>
-      <button onClick={()=>{setMovieIdx(0);setScreen('swiping');}} className="btn-gold max-w-[320px]">I'm {next.name} — Let's Go!</button>
-      <div className="flex gap-1.5 justify-center mt-6">{players.map((_,i)=><div key={i} className="w-2 h-2 rounded-full" style={{background:i<currentPI?'#34C759':i===currentPI?next.color:'rgba(255,255,255,.1)'}}/>)}</div>
-    </div></>);
-  }
-
   // ── SWIPING ──
   if (screen==='swiping') {
-    const cp = players[currentPI]; if(!cp) return null;
     return (<><StarBG/><div className="relative z-10 min-h-screen flex flex-col items-center px-4 py-5 max-w-[480px] mx-auto">
       <div className="w-full flex items-center justify-between mb-1.5" style={{animation:'fadeIn .4s ease'}}>
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{background:`${cp.color}22`,border:`2px solid ${cp.color}44`}}>{cp.avatar}</div>
-          <div><div className="text-white text-sm font-bold">{cp.name}</div><div className="text-white/30 text-[11px]">{content.length-movieIdx} left</div></div>
+          {myPlayer && <>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{background:`${myPlayer.color}22`,border:`2px solid ${myPlayer.color}44`}}>{myPlayer.avatar}</div>
+            <div><div className="text-white text-sm font-bold">{myPlayer.name}</div><div className="text-white/30 text-[11px]">{content.length-movieIdx} left</div></div>
+          </>}
         </div>
-        <div className="flex items-center gap-1.5">{players.map((_,i)=><div key={i} className="w-1.5 h-1.5 rounded-full" style={{background:i<currentPI?'#34C759':i===currentPI?'#D4A843':'rgba(255,255,255,.1)'}}/>)}</div>
+        <div className="flex items-center gap-1.5">{players.map(p=>(
+          <div key={p.id} className="w-1.5 h-1.5 rounded-full" style={{background:p.session_token===myToken?'#D4A843':'rgba(255,255,255,.1)'}}/>
+        ))}</div>
       </div>
       <div className="w-full h-[3px] bg-white/[.05] rounded mb-3 overflow-hidden"><div className="h-full rounded transition-all duration-300" style={{width:`${progress}%`,background:'linear-gradient(90deg,#D4A843,#E8C76A)'}}/></div>
       <div className="relative w-full flex justify-center" style={{height:570}}>
         {content.slice(movieIdx,movieIdx+2).reverse().map((item,i,arr)=>(
-          <SwipeCard key={`${currentPI}-${item.id}`} item={item} isTop={i===arr.length-1} onSwipe={handleSwipe}/>
+          <SwipeCard key={`${item.id}`} item={item} isTop={i===arr.length-1} onSwipe={handleSwipe}/>
         ))}
         {movieIdx>=content.length && <div className="text-center mt-16" style={{animation:'slideUp .6s ease'}}><span className="text-[60px]">✅</span><h3 className="text-white text-xl font-black mt-4" style={{fontFamily:"'Playfair Display',serif"}}>All done!</h3></div>}
       </div>
     </div></>);
   }
 
-  // ── REVEAL ──
+  // ── DONE / WAITING FOR REVEAL ──
   if (screen==='orgReveal') return (<><StarBG/><div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 max-w-[340px] mx-auto text-center" style={{animation:'slideUp .8s ease'}}>
-    <div className="text-[64px] mb-4" style={{animation:'float 3s ease-in-out infinite'}}>🥁</div>
-    <h2 className="text-3xl font-black mb-2.5" style={{fontFamily:"'Playfair Display',serif"}}>Everyone's Done!</h2>
-    <p className="text-white/40 text-sm mb-5">All {players.length} players swiped {content.length} titles</p>
-    <div className="flex justify-center gap-2 mb-8 flex-wrap">{players.map(p=>(
-      <div key={p.id} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl" style={{background:`${p.color}22`,border:'2px solid rgba(52,199,89,.4)'}}>{p.avatar}</div><span className="text-white/35 text-[10px] font-semibold">{p.name.slice(0,8)}</span><span className="text-green-500 text-[9px] font-bold">✓</span></div>
-    ))}</div>
-    <button onClick={revealResults} className="btn-gold max-w-[320px]" style={{animation:'pulseGlow 2s ease-in-out infinite'}}>✦ Reveal Results ✦</button>
+    {isHost ? (<>
+      <div className="text-[64px] mb-4" style={{animation:'float 3s ease-in-out infinite'}}>🥁</div>
+      <h2 className="text-3xl font-black mb-2.5" style={{fontFamily:"'Playfair Display',serif"}}>All Done!</h2>
+      <p className="text-white/40 text-sm mb-5">You swiped {content.length} titles</p>
+      <div className="flex justify-center gap-2 mb-8 flex-wrap">{players.map(p=>(
+        <div key={p.id} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl" style={{background:`${p.color}22`,border:'2px solid rgba(52,199,89,.4)'}}>{p.avatar}</div><span className="text-white/35 text-[10px] font-semibold">{p.name.slice(0,8)}</span></div>
+      ))}</div>
+      <button onClick={revealResults} className="btn-gold max-w-[320px]" style={{animation:'pulseGlow 2s ease-in-out infinite'}}>✦ Reveal Results ✦</button>
+    </>) : (<>
+      <div className="text-[64px] mb-4" style={{animation:'float 3s ease-in-out infinite'}}>✅</div>
+      <h2 className="text-3xl font-black mb-2.5" style={{fontFamily:"'Playfair Display',serif"}}>You're Done!</h2>
+      <p className="text-white/40 text-sm mb-2">Waiting for the host to reveal results...</p>
+      <div className="w-20 h-1 bg-gold/30 rounded-full mx-auto mt-4 overflow-hidden"><div className="h-full bg-gold rounded-full" style={{animation:'slideRight 1.5s ease-in-out infinite'}}/></div>
+    </>)}
   </div></>);
 
   // ═══════════════════════════════════════

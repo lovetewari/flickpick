@@ -15,6 +15,7 @@ body { background: #06060e; font-family: 'Manrope', sans-serif; color: #fff; ove
 @keyframes confetti { 0%{transform:translateY(-100vh) rotate(0);opacity:1} 100%{transform:translateY(100vh) rotate(720deg);opacity:0} }
 @keyframes spin { to{transform:rotate(360deg)} }
 @keyframes pulseGlow { 0%,100%{transform:scale(1);box-shadow:0 0 20px rgba(212,168,67,.15)} 50%{transform:scale(1.03);box-shadow:0 0 40px rgba(212,168,67,.35)} }
+@keyframes slideRight { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
 
 .glass { background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.07); border-radius:22px; backdrop-filter:blur(20px); }
 

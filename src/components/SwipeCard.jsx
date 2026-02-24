@@ -24,14 +24,14 @@ export default function SwipeCard({ item, onSwipe, isTop }) {
     if (Math.abs(curX.current)>90) {
       const d = curX.current>0?'right':'left'; setGone(true);
       setOff(d==='right'?700:-700); setRot(d==='right'?35:-35); setOpa(0);
-      setTimeout(()=>onSwipe(d),280);
+      setTimeout(()=>onSwipe(d), 180); // reduced from 280 → 180ms
     } else { setOff(0); setRot(0); setDec(null); }
   },[onSwipe,gone]);
 
   const btnSwipe = useCallback(d => {
     if (gone) return; setGone(true); setDec(d==='right'?'like':'nope');
     setOff(d==='right'?700:-700); setRot(d==='right'?35:-35); setOpa(0);
-    setTimeout(()=>onSwipe(d),280);
+    setTimeout(()=>onSwipe(d), 180); // reduced from 280 → 180ms
   },[onSwipe,gone]);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export default function SwipeCard({ item, onSwipe, isTop }) {
         width:'min(360px,90vw)',minHeight:490,
         background:'linear-gradient(170deg,rgba(22,22,35,.97),rgba(12,12,20,.99))',borderRadius:28,
         transform:`translateX(${off}px) rotate(${rot}deg) scale(${isTop?1:.94})`,
-        transition:isDrag.current?'none':'all .4s cubic-bezier(.175,.885,.32,1.1)',
+        transition:isDrag.current?'none':'all .3s cubic-bezier(.175,.885,.32,1.1)',
         opacity:isTop?opa:.4, cursor:isTop?'grab':'default',
         boxShadow:isTop?'0 25px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.05)':'0 10px 30px rgba(0,0,0,.3)',
         zIndex:isTop?10:5,
@@ -79,18 +79,18 @@ export default function SwipeCard({ item, onSwipe, isTop }) {
             className="w-full h-full object-cover transition-opacity duration-300" style={{opacity:imgOk?1:0}}/>
           <div className="absolute inset-0" style={{background:'linear-gradient(to top,rgba(12,12,20,1) 0%,rgba(12,12,20,.2) 40%,transparent 65%)'}}/>
 
-          {/* Type badge — top left */}
+          {/* Type badge */}
           <div className={`absolute top-3 left-3 z-10 rounded-lg px-2.5 py-1 text-[11px] font-bold flex items-center gap-1 backdrop-blur-md ${isSeries?'type-badge-series':'type-badge-movie'}`}>
             {isSeries ? '📺 Series' : '🍿 Movie'}
           </div>
 
-          {/* Rating — top right */}
+          {/* Rating */}
           <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-xl rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 border border-white/[.08]">
             <span className="text-yellow-400 text-sm">★</span>
             <span className="text-white text-sm font-bold">{item.rating}</span>
           </div>
 
-          {/* OTT tags — bottom of poster */}
+          {/* OTT tags */}
           <div className="absolute bottom-12 left-4 flex gap-1.5 flex-wrap z-10">
             {(item.ott||[]).slice(0,3).map(p=>(
               <span key={p} className="ott shadow-lg" style={{background:OTT_BG[p]||'#555'}}>{p}</span>
@@ -102,22 +102,18 @@ export default function SwipeCard({ item, onSwipe, isTop }) {
         <div className="px-5 pb-5 pt-1">
           <h3 className="text-[20px] font-extrabold text-white leading-tight" style={{fontFamily:"'Playfair Display',serif"}}>{item.title}</h3>
 
-          {/* ── Meta row — different for movies vs series ── */}
           <div className="flex gap-2 mt-1.5 items-center flex-wrap">
             <span className="text-white/40 text-[13px]">{item.year||''}</span>
             {item.duration && <>
               <span className="text-white/15">·</span>
               <span className="text-white/40 text-[13px]">{item.duration}</span>
             </>}
-
-            {/* Series-specific metadata */}
             {isSeries && item.seasons > 0 && <>
               <span className="text-white/15">·</span>
               <span className="text-purple-400/80 text-[13px] font-semibold">{item.seasons}S{item.episodes > 0 ? ` · ${item.episodes} Ep` : ''}</span>
             </>}
           </div>
 
-          {/* ── Series status badge ── */}
           {isSeries && item.status && (
             <div className="flex items-center gap-2 mt-2">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isReturning ? 'bg-green-500/15 text-green-400 border border-green-500/30' : item.status==='Ended' ? 'bg-red-400/10 text-red-400/70 border border-red-400/20' : 'bg-white/5 text-white/30 border border-white/10'}`}>
@@ -129,14 +125,12 @@ export default function SwipeCard({ item, onSwipe, isTop }) {
             </div>
           )}
 
-          {/* ── Genres ── */}
           <div className="flex gap-1.5 mt-2 flex-wrap">
             {(item.genre||[]).slice(0,3).map(g=>(
               <span key={g} className="bg-white/[.06] text-white/50 text-[11px] px-2.5 py-1 rounded-full font-semibold border border-white/[.06]">{g}</span>
             ))}
           </div>
 
-          {/* ── Description ── */}
           <p className="text-white/35 text-[13px] leading-relaxed mt-2 line-clamp-3">{item.desc}</p>
         </div>
       </div>
