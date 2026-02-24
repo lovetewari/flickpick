@@ -40,6 +40,7 @@ export default function RoomPage() {
   const [resultTab, setResultTab] = useState('matches');
   const [resultData, setResultData] = useState(null);
   const [showConf, setShowConf] = useState(false);
+  const [revealLoading, setRevealLoading] = useState(false);
 
   // ── When content type changes, reset category ──
   useEffect(() => {
@@ -87,6 +88,8 @@ export default function RoomPage() {
       if (r.status === 'lobby') {
         setScreen(host ? 'lobby' : 'waiting');
       } else if (r.status === 'results') {
+        // Load content first so match posters render correctly
+        await fetchContentForRoom(r.content_type||'all', r.content_category||'trending', r.genre_filter||'All', r.platforms||[]);
         fetchResults();
         setScreen('results');
       } else if (r.status === 'swiping') {
@@ -114,9 +117,15 @@ export default function RoomPage() {
       })();
     }
     if (room.status === 'results' && screen !== 'results') {
-      fetchResults();
-      setScreen('results');
-      setShowConf(true);
+      (async () => {
+        // Load content so match posters render correctly
+        if (content.length === 0) {
+          await fetchContentForRoom(room.content_type||'all', room.content_category||'trending', room.genre_filter||'All', room.platforms||[]);
+        }
+        await fetchResults();
+        setScreen('results');
+        setShowConf(true);
+      })();
     }
   }, [room?.status]);
 
@@ -159,7 +168,7 @@ export default function RoomPage() {
   }, [contentType, category, genre, platforms]);
 
   const fetchResults = async () => {
-    try { const r = await fetch(`/api/results/${code}`); setResultData(await r.json()); } catch {}
+    try { const r = await fetch(`/api/results/${code}`); const d = await r.json(); setResultData(d); return d; } catch { return null; }
   };
 
   // ── Invite ──
@@ -201,20 +210,32 @@ export default function RoomPage() {
 
   // ── Reveal results (host only) ──
   const revealResults = async () => {
-    const { data:{user} } = await supabase.auth.getUser();
-    let historyEntries = [];
-    if (user && resultData) {
-      const matchIds = new Set(resultData.matchIds||[]);
-      for (const item of content) {
-        historyEntries.push({
-          user_id: user.id, room_code: code, content_id: item.id,
-          content_type: item.type, title: item.title,
-          poster_path: item.posterPath || '', was_match: matchIds.has(item.id),
-        });
+    if (revealLoading) return;
+    setRevealLoading(true);
+    try {
+      // First fetch current results so matchIds are populated for history
+      const rRes = await fetch(`/api/results/${code}`);
+      const rData = await rRes.json();
+      setResultData(rData);
+
+      const { data:{user} } = await supabase.auth.getUser();
+      let historyEntries = [];
+      if (user) {
+        const matchSet = new Set(rData.matchIds||[]);
+        for (const item of content) {
+          historyEntries.push({
+            user_id: user.id, room_code: code, content_id: item.id,
+            content_type: item.type, title: item.title,
+            poster_path: item.posterPath || '', was_match: matchSet.has(item.id),
+          });
+        }
       }
+      await fetch(`/api/results/${code}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'results',historyEntries})});
+      setShowConf(true);
+      setScreen('results');
+    } finally {
+      setRevealLoading(false);
     }
-    await fetch(`/api/results/${code}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'results',historyEntries})});
-    await fetchResults(); setShowConf(true); setScreen('results');
   };
 
   const myPlayer = players.find(p => p.session_token === myToken) || players[0];
@@ -441,7 +462,7 @@ export default function RoomPage() {
       <div className="flex justify-center gap-2 mb-8 flex-wrap">{players.map(p=>(
         <div key={p.id} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl" style={{background:`${p.color}22`,border:'2px solid rgba(52,199,89,.4)'}}>{p.avatar}</div><span className="text-white/35 text-[10px] font-semibold">{p.name.slice(0,8)}</span></div>
       ))}</div>
-      <button onClick={revealResults} className="btn-gold max-w-[320px]" style={{animation:'pulseGlow 2s ease-in-out infinite'}}>✦ Reveal Results ✦</button>
+      <button onClick={revealResults} disabled={revealLoading} className="btn-gold max-w-[320px]" style={{animation:revealLoading?'none':'pulseGlow 2s ease-in-out infinite'}}>{revealLoading?'Calculating...':'✦ Reveal Results ✦'}</button>
     </>) : (<>
       <div className="text-[64px] mb-4" style={{animation:'float 3s ease-in-out infinite'}}>✅</div>
       <h2 className="text-3xl font-black mb-2.5" style={{fontFamily:"'Playfair Display',serif"}}>You're Done!</h2>
@@ -456,7 +477,7 @@ export default function RoomPage() {
   if (screen==='results' && resultData) {
     const { matchIds, ranked, individual } = resultData;
     const rPlayers = resultData.players || players;
-    const matchItems = content.filter(c=>(matchIds||[]).includes(c.id));
+    const matchItems = content.filter(c=>(matchIds||[]).map(Number).includes(Number(c.id)));
 
     return (<><StarBG/>
       {showConf&&<div className="fixed inset-0 z-[200] pointer-events-none overflow-hidden">{COLORS.flatMap((c,ci)=>Array.from({length:5},(_,i)=>(
@@ -500,7 +521,7 @@ export default function RoomPage() {
         {/* ── RANKED ── */}
         {resultTab==='ranked'&&(<div className="flex flex-col gap-2 w-full">
           {(ranked||[]).slice(0,20).map((r,i)=>{
-            const item=content.find(c=>c.id===r.contentId); if(!item)return null;
+            const item=content.find(c=>c.id===Number(r.contentId)); if(!item)return null;
             const pct=(r.votes/rPlayers.length)*100;
             const med=['🥇','🥈','🥉'];
             return(<div key={r.contentId} className="glass !p-3 flex items-center gap-2.5" style={{animation:`slideUp .4s ease ${i*.05}s both`}}>
@@ -525,7 +546,7 @@ export default function RoomPage() {
         {/* ── INDIVIDUAL ── */}
         {resultTab==='individual'&&(<div className="w-full">
           {rPlayers.map((p,pi)=>{
-            const likes=((individual||{})[p.id]||[]).map(l=>content.find(c=>c.id===l.id)).filter(Boolean);
+            const likes=((individual||{})[p.id]||[]).map(l=>content.find(c=>c.id===Number(l.id))).filter(Boolean);
             return(<div key={p.id} className="mb-5" style={{animation:`slideUp .5s ease ${pi*.1}s both`}}>
               <div className="flex items-center gap-2.5 mb-2.5"><div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{background:`${p.color}22`,border:`2px solid ${p.color}44`}}>{p.avatar}</div><span className="text-white text-[15px] font-bold">{p.name}</span><span className="text-white/20 text-xs">liked {likes.length}</span></div>
               {likes.length>0

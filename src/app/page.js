@@ -41,10 +41,11 @@ export default function Home() {
   const create = async () => {
     if(!hostName.trim()){show('Enter your name');return;}
     setLoading(true);
+    localStorage.removeItem('fp_room_code'); // clear any previous room session
     try {
       const r = await fetch('/api/create-room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hostName:hostName.trim(),userId:user?.id||null})});
       const d = await r.json(); if(d.error) throw new Error(d.error);
-      localStorage.setItem('fp_session',d.sessionToken); localStorage.setItem('fp_host','true');
+      localStorage.setItem('fp_session',d.sessionToken); localStorage.setItem('fp_host','true'); localStorage.setItem('fp_room_code',d.room.code);
       router.push(`/room/${d.room.code}`);
     } catch(e){show(e.message);}
     setLoading(false);
@@ -57,7 +58,7 @@ export default function Home() {
     try {
       const r = await fetch('/api/join-room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:joinCode.trim(),playerName:joinName.trim(),userId:user?.id||null})});
       const d = await r.json(); if(d.error) throw new Error(d.error);
-      localStorage.setItem('fp_session',d.sessionToken); localStorage.setItem('fp_host','false');
+      localStorage.setItem('fp_session',d.sessionToken); localStorage.setItem('fp_host','false'); localStorage.setItem('fp_room_code',d.room.code);
       router.push(`/room/${d.room.code}`);
     } catch(e){show(e.message);}
     setLoading(false);
