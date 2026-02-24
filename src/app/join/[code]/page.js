@@ -11,6 +11,8 @@ export default function JoinPage() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [roomStatus, setRoomStatus] = useState('lobby');
+  const [userId, setUserId] = useState(null);   // stored once, reused on join
+  const [redirecting, setRedirecting] = useState(false);
   const [toast, setToast] = useState({msg:'',v:false});
   const show = m => { setToast({msg:m,v:true}); setTimeout(()=>setToast(t=>({...t,v:false})),2500); };
 
@@ -19,33 +21,54 @@ export default function JoinPage() {
     const savedCode = localStorage.getItem('fp_room_code');
     const savedSession = localStorage.getItem('fp_session');
     if (savedCode === code.toUpperCase() && savedSession) {
+      setRedirecting(true);
       router.replace(`/room/${code}`);
       return;
     }
 
+    // Fetch user ONCE — stored in state, not re-fetched on every join click
     supabase.auth.getUser().then(({data:{user}})=>{
-      if(user) supabase.from('profiles').select('full_name').eq('id',user.id).single().then(({data})=>{if(data?.full_name)setName(data.full_name);});
+      if (user) {
+        setUserId(user.id);
+        supabase.from('profiles').select('full_name').eq('id',user.id).single()
+          .then(({data})=>{ if(data?.full_name) setName(data.full_name); });
+      }
     });
-    // Check room status so we can warn if game is in progress
-    supabase.from('rooms').select('status').eq('code', code.toUpperCase()).single().then(({data})=>{
-      if(data?.status) setRoomStatus(data.status);
-    });
+
+    // Check room status to show "game in progress" warning
+    supabase.from('rooms').select('status').eq('code', code.toUpperCase()).single()
+      .then(({data})=>{ if(data?.status) setRoomStatus(data.status); });
   },[]);
 
   const join = async () => {
     if(!name.trim()){show('Enter your name');return;}
     setLoading(true);
     try {
-      const {data:{user}} = await supabase.auth.getUser();
-      const r = await fetch('/api/join-room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,playerName:name.trim(),userId:user?.id||null})});
-      const d = await r.json(); if(d.error) throw new Error(d.error);
-      localStorage.setItem('fp_session',d.sessionToken);
-      localStorage.setItem('fp_host','false');
+      // Use cached userId — no extra network call to Supabase auth
+      const r = await fetch('/api/join-room',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({code, playerName:name.trim(), userId: userId||null})
+      });
+      const d = await r.json();
+      if(d.error) throw new Error(d.error);
+      localStorage.setItem('fp_session', d.sessionToken);
+      localStorage.setItem('fp_host', 'false');
       localStorage.setItem('fp_room_code', d.room.code);
       router.push(`/room/${d.room.code}`);
-    } catch(e){show(e.message);}
-    setLoading(false);
+    } catch(e) {
+      show(e.message);
+    } finally {
+      setLoading(false);  // always resets — even if router.push or anything else throws
+    }
   };
+
+  // Show spinner while redirecting existing session
+  if (redirecting) return (<><StarBG/>
+    <div className="relative z-10 min-h-screen flex items-center justify-center">
+      <div className="spinner"/>
+    </div>
+  </>);
 
   return (<><StarBG/>
     <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 max-w-[400px] mx-auto">
@@ -61,7 +84,7 @@ export default function JoinPage() {
           {roomStatus==='swiping' && <div className="mt-2 text-yellow-400/80 text-[11px] font-bold bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-3 py-1.5">⚡ Game in progress — you'll jump straight in!</div>}
         </div>
         <label className="text-white/35 text-[11px] font-bold tracking-[1.5px] uppercase mb-2 block">Your name</label>
-        <input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&join()} placeholder="Enter your name" className="inp mb-5"/>
+        <input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!loading&&join()} placeholder="Enter your name" className="inp mb-5"/>
         <button onClick={join} disabled={loading} className="btn-gold">{loading?'Joining...':'Join Room 🎉'}</button>
       </div>
     </div>
