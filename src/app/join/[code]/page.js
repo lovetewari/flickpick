@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import StarBG from '@/components/StarBG';
+import CinematicBG from '@/components/CinematicBG';
 import Toast from '@/components/Toast';
+import { IconBrand, IconArrowRight } from '@/components/Icons';
 
 export default function JoinPage() {
   const { code } = useParams();
@@ -11,13 +12,14 @@ export default function JoinPage() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [roomStatus, setRoomStatus] = useState('lobby');
-  const [userId, setUserId] = useState(null);   // stored once, reused on join
+  const [userId, setUserId] = useState(null);
   const [redirecting, setRedirecting] = useState(false);
-  const [toast, setToast] = useState({msg:'',v:false});
-  const show = m => { setToast({msg:m,v:true}); setTimeout(()=>setToast(t=>({...t,v:false})),2500); };
+  const [notFound, setNotFound] = useState(false);
+  const [posters, setPosters] = useState([]);
+  const [toast, setToast] = useState({ msg: '', v: false });
+  const show = m => { setToast({ msg: m, v: true }); setTimeout(() => setToast(t => ({ ...t, v: false })), 2500); };
 
-  useEffect(()=>{
-    // If already in this room, skip the form and go straight in
+  useEffect(() => {
     const savedCode = localStorage.getItem('fp_room_code');
     const savedSession = localStorage.getItem('fp_session');
     if (savedCode === code.toUpperCase() && savedSession) {
@@ -25,69 +27,75 @@ export default function JoinPage() {
       router.replace(`/room/${code}`);
       return;
     }
-
-    // Fetch user ONCE — stored in state, not re-fetched on every join click
-    supabase.auth.getUser().then(({data:{user}})=>{
+    supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         setUserId(user.id);
-        supabase.from('profiles').select('full_name').eq('id',user.id).single()
-          .then(({data})=>{ if(data?.full_name) setName(data.full_name); });
+        supabase.from('profiles').select('full_name').eq('id', user.id).single()
+          .then(({ data }) => { if (data?.full_name) setName(data.full_name); });
       }
     });
-
-    // Check room status to show "game in progress" warning
     supabase.from('rooms').select('status').eq('code', code.toUpperCase()).single()
-      .then(({data})=>{ if(data?.status) setRoomStatus(data.status); });
-  },[]);
+      .then(({ data }) => {
+        if (data?.status) setRoomStatus(data.status);
+        else setNotFound(true); // invalid or expired invite link
+      });
+    fetch('/api/posters').then(r => r.json()).then(d => { if (d.posters?.length) setPosters(d.posters); }).catch(() => {});
+  }, []);
 
   const join = async () => {
-    if(!name.trim()){show('Enter your name');return;}
+    if (!name.trim()) { show('Enter your name'); return; }
     setLoading(true);
     try {
-      // Use cached userId — no extra network call to Supabase auth
-      const r = await fetch('/api/join-room',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({code, playerName:name.trim(), userId: userId||null})
+      const r = await fetch('/api/join-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, playerName: name.trim(), userId: userId || null }),
       });
       const d = await r.json();
-      if(d.error) throw new Error(d.error);
+      if (d.error) throw new Error(d.error);
       localStorage.setItem('fp_session', d.sessionToken);
       localStorage.setItem('fp_host', 'false');
       localStorage.setItem('fp_room_code', d.room.code);
       router.push(`/room/${d.room.code}`);
-    } catch(e) {
+    } catch (e) {
       show(e.message);
     } finally {
-      setLoading(false);  // always resets — even if router.push or anything else throws
+      setLoading(false);
     }
   };
 
-  // Show spinner while redirecting existing session
-  if (redirecting) return (<><StarBG/>
-    <div className="relative z-10 min-h-screen flex items-center justify-center">
-      <div className="spinner"/>
+  if (redirecting) return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
+
+  if (notFound) return (<><CinematicBG variant="content" />
+    <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">
+      <div className="glass-dark p-8 max-w-[380px] w-full text-center rise">
+        <h2 className="text-white text-[19px] font-bold mb-1.5">Invite link not valid</h2>
+        <p className="text-white/50 text-[13.5px] mb-5">This room doesn't exist anymore. Ask your host to send a new invite.</p>
+        <button onClick={() => router.push('/')} className="btn btn-primary btn-block">Go home</button>
+      </div>
     </div>
   </>);
 
-  return (<><StarBG/>
-    <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 max-w-[400px] mx-auto">
-      <div className="text-center mb-8" style={{animation:'slideUp .6s ease'}}>
-        <div className="text-[48px] mb-3" style={{animation:'float 4s ease-in-out infinite'}}>🎬</div>
-        <h1 className="text-3xl font-black mb-2" style={{fontFamily:"'Playfair Display',serif",background:'linear-gradient(135deg,#fff,#D4A843)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>FlickPick</h1>
-        <p className="text-white/40 text-sm">You've been invited to movie night!</p>
-      </div>
-      <div className="glass p-6 w-full" style={{animation:'slideUp .6s ease .15s both'}}>
-        <div className="text-center mb-5">
-          <span className="text-white/30 text-[11px] font-semibold tracking-wide">JOINING ROOM</span>
-          <div className="text-gold text-3xl font-black tracking-[4px] mt-1" style={{fontFamily:"'Bebas Neue'"}}>{code}</div>
-          {roomStatus==='swiping' && <div className="mt-2 text-yellow-400/80 text-[11px] font-bold bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-3 py-1.5">⚡ Game in progress — you'll jump straight in!</div>}
+  return (<><CinematicBG variant="hero" posters={posters} />
+    <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">
+      <div className="w-full max-w-[400px]">
+        <div className="text-center mb-7 rise">
+          <div className="app-badge floaty mx-auto"><IconBrand size={40} /></div>
+          <h1 className="wordmark text-[34px] text-white mt-5">FlickPick</h1>
+          <p className="text-white/55 text-sm mt-2">You've been invited to movie night</p>
         </div>
-        <label className="text-white/35 text-[11px] font-bold tracking-[1.5px] uppercase mb-2 block">Your name</label>
-        <input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!loading&&join()} placeholder="Enter your name" className="inp mb-5"/>
-        <button onClick={join} disabled={loading} className="btn-gold">{loading?'Joining...':'Join Room 🎉'}</button>
+        <div className="glass-dark p-6 rise" style={{ animationDelay: '.1s' }}>
+          <div className="text-center mb-5">
+            <span className="text-white/40 text-[11px] font-semibold tracking-wide">JOINING ROOM</span>
+            <div className="wordmark text-[32px] tracking-[6px] mt-1" style={{ color: '#4aa3ff' }}>{code}</div>
+            {roomStatus === 'swiping' && <div className="mt-3 text-[11px] font-semibold rounded-xl px-3 py-2" style={{ background: 'rgba(10,132,255,.18)', color: '#4aa3ff' }}>Game in progress — you'll jump straight in</div>}
+          </div>
+          <label className="label !text-white/45" htmlFor="joinName">Your name</label>
+          <input id="joinName" autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && !loading && join()} placeholder="Enter your name" className="field-on-dark mb-5" autoComplete="name" />
+          <button onClick={join} disabled={loading} className="btn btn-primary btn-block btn-lg">{loading ? <><span className="spinner !w-5 !h-5 !border-2 !border-white/40 !border-t-white" />Joining…</> : <>Join room <IconArrowRight size={18} /></>}</button>
+        </div>
       </div>
     </div>
-    <Toast msg={toast.msg} visible={toast.v}/>
+    <Toast msg={toast.msg} visible={toast.v} />
   </>);
 }

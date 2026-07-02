@@ -1,0 +1,23 @@
+# Backup keep-alive: pings Supabase directly every 3 days so the free-tier
+# project never pauses, even if the Vercel deployment is down.
+# Required repo secrets: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '0 5 */3 * *' # every 3 days, 05:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          curl -sf \
+            "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/catalog?select=id&limit=1" \
+            -H "apikey: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
+            -o /dev/null
+          echo "Supabase pinged successfully"

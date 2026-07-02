@@ -2,47 +2,50 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { OTT_PLATFORMS, OTT_BG, GENRES, CONTENT_TYPES, getCategoriesForType, COLORS } from '@/lib/constants';
-import StarBG from '@/components/StarBG';
+import { OTT_PLATFORMS, OTT_BG, GENRES, CONTENT_TYPES, getCategoriesForType, COLORS, DECK_SIZES, LEGACY_CATEGORY, CATEGORIES } from '@/lib/constants';
+import CinematicBG from '@/components/CinematicBG';
 import Toast from '@/components/Toast';
 import SwipeCard from '@/components/SwipeCard';
+import {
+  IconFilm, IconTv, IconSparkles, IconStar, IconUsers, IconTrophy, IconHeart, IconPlay,
+  IconClock, IconCheck, IconShare, IconCopy, IconPlus, IconClose, IconChevronLeft, IconArrowRight,
+} from '@/components/Icons';
+
+const CT_ICON = { movies: IconFilm, series: IconTv, all: IconSparkles };
+const CAT_ICON = { hot: IconSparkles, latest: IconClock, hits: IconTrophy, most_watched: IconPlay, top_rated: IconStar, hidden_gems: IconHeart };
 
 export default function RoomPage() {
   const { code } = useParams();
   const router = useRouter();
 
-  // ── Core ──
   const [screen, setScreen] = useState('loading');
   const [room, setRoom] = useState(null);
   const [players, setPlayers] = useState([]);
   const [isHost, setIsHost] = useState(false);
-  const [myToken, setMyToken] = useState('');   // this device's session token
-  const [toast, setToast] = useState({msg:'',v:false});
-  const show = m => { setToast({msg:m,v:true}); setTimeout(()=>setToast(t=>({...t,v:false})),2500); };
+  const [myToken, setMyToken] = useState('');
+  const [toast, setToast] = useState({ msg: '', v: false });
+  const show = m => { setToast({ msg: m, v: true }); setTimeout(() => setToast(t => ({ ...t, v: false })), 2500); };
 
-  // ── Lobby ──
   const [contentType, setContentType] = useState('all');
-  const [category, setCategory] = useState('trending');
+  const [category, setCategory] = useState('hot');
   const [platforms, setPlatforms] = useState([]);
   const [genre, setGenre] = useState('All');
+  const [deckMovies, setDeckMovies] = useState(20);   // host-picked deck sizes
+  const [deckSeries, setDeckSeries] = useState(20);
   const [addName, setAddName] = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
-  // ── Content ──
   const [content, setContent] = useState([]);
   const [contentLoading, setContentLoading] = useState(false);
   const [contentLoaded, setContentLoaded] = useState(false);
 
-  // ── Swiping ──
   const [movieIdx, setMovieIdx] = useState(0);
 
-  // ── Results ──
   const [resultTab, setResultTab] = useState('matches');
   const [resultData, setResultData] = useState(null);
   const [showConf, setShowConf] = useState(false);
   const [revealLoading, setRevealLoading] = useState(false);
 
-  // ── When content type changes, reset category ──
   useEffect(() => {
     const cats = getCategoriesForType(contentType);
     if (!cats.find(c => c.id === category)) setCategory(cats[0].id);
@@ -50,23 +53,53 @@ export default function RoomPage() {
     setContent([]);
   }, [contentType]);
 
-  useEffect(() => { setContentLoaded(false); }, [category, genre, platforms]);
+  useEffect(() => { setContentLoaded(false); }, [category, genre, platforms, deckMovies, deckSeries]);
 
-  // ── Fetch content using room params ──
-  const fetchContentForRoom = useCallback(async (type, cat, gen, plats) => {
+  const fetchContentForRoom = useCallback(async (type, cat, gen, plats, mCount, sCount) => {
     setContentLoading(true);
     try {
-      const params = new URLSearchParams({ type, category: cat, genre: gen, platforms: (plats||[]).join(',') });
-      const r = await fetch(`/api/tmdb?${params}`);
+      const params = new URLSearchParams({
+        type, category: cat, genre: gen, platforms: (plats || []).join(','),
+        movieCount: String(mCount || 20), seriesCount: String(sCount || 20),
+      });
+      const r = await fetch(`/api/content?${params}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setContent(d.results || []);
       setContentLoaded(true);
-    } catch (err) { show('Failed to load content'); }
-    setContentLoading(false);
+      setContentLoading(false);
+      return d.results || [];
+    } catch (err) {
+      show('Failed to load content');
+      setContentLoading(false);
+      return null;
+    }
   }, []);
 
-  // ── Init ──
+  // The single source of truth for a running game's deck: the frozen copy on
+  // the room row. Only legacy rooms (no frozen deck) fall back to a rebuild.
+  const resolveDeck = useCallback(async (r) => {
+    if (Array.isArray(r.deck) && r.deck.length > 0) {
+      setContent(r.deck);
+      setContentLoaded(true);
+      return r.deck;
+    }
+    return fetchContentForRoom(r.content_type || 'all', r.content_category || 'hot', r.genre_filter || 'All', r.platforms || [], r.movie_count, r.series_count);
+  }, [fetchContentForRoom]);
+
+  // Resume where this player left off: skip cards already swiped server-side.
+  const restoreProgress = useCallback(async (deck, playerList, token) => {
+    try {
+      const me = (playerList || []).find(p => p.session_token === token);
+      if (!me) return 0;
+      const { data } = await supabase.from('swipes').select('content_id').eq('player_id', me.id);
+      const swiped = new Set((data || []).map(s => s.content_id));
+      if (swiped.size === 0) return 0;
+      const idx = deck.findIndex(it => !swiped.has(it.id));
+      return idx === -1 ? deck.length : idx;
+    } catch { return 0; }
+  }, []);
+
   useEffect(() => {
     (async () => {
       const host = localStorage.getItem('fp_host') === 'true';
@@ -75,12 +108,17 @@ export default function RoomPage() {
       setMyToken(token);
 
       const { data: r } = await supabase.from('rooms').select('*').eq('code', code.toUpperCase()).single();
-      if (!r) { router.push('/'); return; }
+      if (!r) { setScreen('notFound'); return; }
       setRoom(r);
       if (r.platforms?.length) setPlatforms(r.platforms);
       if (r.genre_filter) setGenre(r.genre_filter);
       if (r.content_type) setContentType(r.content_type);
-      if (r.content_category) setCategory(r.content_category);
+      if (r.content_category) {
+        const cat = LEGACY_CATEGORY[r.content_category] || r.content_category;
+        setCategory(CATEGORIES.some(c => c.id === cat) ? cat : 'hot');
+      }
+      if (r.movie_count) setDeckMovies(r.movie_count);
+      if (r.series_count) setDeckSeries(r.series_count);
 
       const { data: ps } = await supabase.from('players').select('*').eq('room_id', r.id).order('player_order');
       setPlayers(ps || []);
@@ -88,140 +126,163 @@ export default function RoomPage() {
       if (r.status === 'lobby') {
         setScreen(host ? 'lobby' : 'waiting');
       } else if (r.status === 'results') {
-        // Load content first so match posters render correctly
-        await fetchContentForRoom(r.content_type||'all', r.content_category||'trending', r.genre_filter||'All', r.platforms||[]);
+        const deck = await resolveDeck(r);
+        if (!deck) { setScreen('loadError'); return; }
         fetchResults();
         setScreen('results');
       } else if (r.status === 'swiping') {
-        // Rejoining a game in progress — load content and go to swiping
-        await fetchContentForRoom(r.content_type||'all', r.content_category||'trending', r.genre_filter||'All', r.platforms||[]);
-        setMovieIdx(0);
-        setScreen('swiping');
+        const deck = await resolveDeck(r);
+        if (!deck) { setScreen('loadError'); return; }
+        const idx = await restoreProgress(deck, ps || [], token);
+        setMovieIdx(idx);
+        setScreen(idx >= deck.length ? 'orgReveal' : 'swiping');
       }
     })();
   }, [code, router]);
 
-  // ── React to room status changes (for non-hosts waiting) ──
   useEffect(() => {
     if (!room || isHost) return;
     if (room.status === 'swiping' && screen === 'waiting') {
       (async () => {
-        await fetchContentForRoom(
-          room.content_type||'all',
-          room.content_category||'trending',
-          room.genre_filter||'All',
-          room.platforms||[]
-        );
-        setMovieIdx(0);
-        setScreen('swiping');
+        const deck = await resolveDeck(room);
+        if (!deck) { setScreen('loadError'); return; }
+        const idx = await restoreProgress(deck, players, myToken);
+        setMovieIdx(idx);
+        setScreen(idx >= deck.length ? 'orgReveal' : 'swiping');
       })();
     }
     if (room.status === 'results' && screen !== 'results') {
       (async () => {
-        // Load content so match posters render correctly
         if (content.length === 0) {
-          await fetchContentForRoom(room.content_type||'all', room.content_category||'trending', room.genre_filter||'All', room.platforms||[]);
+          const deck = await resolveDeck(room);
+          if (!deck) { setScreen('loadError'); return; }
         }
         await fetchResults();
         setScreen('results');
         setShowConf(true);
       })();
     }
-  }, [room?.status]);
+  }, [room?.status, screen]);
 
-  // ── Realtime ──
   useEffect(() => {
     if (!room) return;
     const ch = supabase.channel(`room-${room.id}`)
-      .on('postgres_changes', { event:'*', schema:'public', table:'players', filter:`room_id=eq.${room.id}` }, p => {
-        if (p.eventType==='INSERT') {
-          setPlayers(prev => [...prev.filter(x=>x.id!==p.new.id), p.new].sort((a,b)=>a.player_order-b.player_order));
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${room.id}` }, p => {
+        if (p.eventType === 'INSERT') {
+          setPlayers(prev => [...prev.filter(x => x.id !== p.new.id), p.new].sort((a, b) => a.player_order - b.player_order));
           show(`${p.new.name} joined! ${p.new.avatar}`);
-        } else if (p.eventType==='UPDATE') {
-          setPlayers(prev => prev.map(x=>x.id===p.new.id?p.new:x));
+        } else if (p.eventType === 'UPDATE') {
+          setPlayers(prev => prev.map(x => x.id === p.new.id ? p.new : x));
         }
       })
-      .on('postgres_changes', { event:'UPDATE', schema:'public', table:'rooms', filter:`id=eq.${room.id}` }, p => {
-        setRoom(p.new); // triggers the useEffect above for screen transitions
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, p => {
+        setRoom(p.new);
       })
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [room]);
+    // Depend on the id, NOT the room object — every rooms UPDATE replaces the
+    // object, and depending on it tore down + recreated the channel on each
+    // event (dropped events, reconnect storms — the main instability source).
+  }, [room?.id]);
 
-  // ── Load content (lobby) ──
   const loadContent = useCallback(async () => {
     setContentLoading(true);
     try {
-      const params = new URLSearchParams({ type:contentType, category, genre, platforms:platforms.join(',') });
-      const r = await fetch(`/api/tmdb?${params}`);
+      const params = new URLSearchParams({
+        type: contentType, category, genre, platforms: platforms.join(','),
+        movieCount: String(deckMovies), seriesCount: String(deckSeries),
+      });
+      const r = await fetch(`/api/content?${params}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setContent(d.results || []);
       setContentLoaded(true);
-      const mc = (d.results||[]).filter(c=>c.type==='movie').length;
-      const sc = (d.results||[]).filter(c=>c.type==='series').length;
-      if (contentType==='movies') show(`✓ ${mc} movies loaded`);
-      else if (contentType==='series') show(`✓ ${sc} web series loaded`);
-      else show(`✓ ${mc} movies + ${sc} series loaded`);
+      const mc = (d.results || []).filter(c => c.type === 'movie').length;
+      const sc = (d.results || []).filter(c => c.type === 'series').length;
+      if (contentType === 'movies') show(`${mc} movies loaded`);
+      else if (contentType === 'series') show(`${sc} web series loaded`);
+      else show(`${mc} movies + ${sc} series loaded`);
     } catch (err) { show('Failed: ' + err.message); setContent([]); }
     setContentLoading(false);
-  }, [contentType, category, genre, platforms]);
+  }, [contentType, category, genre, platforms, deckMovies, deckSeries]);
 
   const fetchResults = async () => {
-    try { const r = await fetch(`/api/results/${code}`); const d = await r.json(); setResultData(d); return d; } catch { return null; }
+    try {
+      const r = await fetch(`/api/results/${code}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setResultData(d);
+      return d;
+    } catch { return null; }
   };
 
-  // ── Invite ──
-  const inviteLink = typeof window!=='undefined'?`${window.location.origin}/join/${code}`:'';
-  const copyInvite = () => { navigator.clipboard?.writeText(`🎬 Join my FlickPick room!\nCode: ${code}\n${inviteLink}`).then(()=>show('Copied! 📋')).catch(()=>show(`Code: ${code}`)); };
-  const shareInvite = async () => { if(navigator.share) try{await navigator.share({title:'FlickPick',text:`Join room ${code}`,url:inviteLink});}catch{copyInvite();}else copyInvite(); };
+  const inviteLink = typeof window !== 'undefined' ? `${window.location.origin}/join/${code}` : '';
+  const copyInvite = () => { navigator.clipboard?.writeText(`Join my FlickPick room!\nCode: ${code}\n${inviteLink}`).then(() => show('Invite copied')).catch(() => show(`Code: ${code}`)); };
+  const shareInvite = async () => { if (navigator.share) try { await navigator.share({ title: 'FlickPick', text: `Join room ${code}`, url: inviteLink }); } catch { copyInvite(); } else copyInvite(); };
 
-  // ── Add friend ──
   const addFriend = async n => {
     try {
-      const r = await fetch('/api/join-room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,playerName:n})});
-      const d = await r.json(); if(d.error) throw new Error(d.error);
+      const r = await fetch('/api/join-room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, playerName: n }) });
+      const d = await r.json(); if (d.error) throw new Error(d.error);
       setAddName(''); setShowAdd(false);
-    } catch(e){show(e.message);}
+    } catch (e) { show(e.message); }
   };
 
-  // ── Start swiping (host only) ──
   const startSwiping = async () => {
-    if(content.length===0){show('Load content first');return;}
-    await fetch(`/api/results/${code}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'swiping',platforms,genre_filter:genre,content_type:contentType,content_category:category})});
-    setMovieIdx(0);
-    setScreen('swiping');
+    if (content.length === 0) { show('Load content first'); return; }
+    try {
+      // Freeze the deck on the room so EVERY player gets this exact deck —
+      // rejoins and results reloads read it back instead of rebuilding.
+      const r = await fetch(`/api/results/${code}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'swiping', platforms, genre_filter: genre, content_type: contentType, content_category: category, movie_count: deckMovies, series_count: deckSeries, deck: content }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setMovieIdx(0);
+      setScreen('swiping');
+    } catch (e) { show('Could not start: ' + e.message); }
   };
 
-  // ── Swipe handler — each device swipes as its own player ──
+  // Mark this player done — with retries, so the host isn't left waiting on a
+  // player whose final PATCH was dropped by a flaky connection.
+  const markDone = async token => {
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await fetch('/api/swipe', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionToken: token }) });
+        if (r.ok) return;
+      } catch { /* retry */ }
+      await new Promise(res => setTimeout(res, 700 * (i + 1)));
+    }
+    show('Could not sync your finish status');
+  };
+
   const handleSwipe = dir => {
     const item = content[movieIdx]; if (!item) return;
     const token = myToken || localStorage.getItem('fp_session') || '';
-    // Fire-and-forget — don't await, keeps swiping instant
-    fetch('/api/swipe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionToken:token,contentId:item.id,contentType:item.type,liked:dir==='right'})});
+    // Optimistic — the UI advances immediately, but failures surface a toast
+    // instead of silently losing the vote.
+    fetch('/api/swipe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionToken: token, contentId: item.id, contentType: item.type, liked: dir === 'right' }) })
+      .then(r => r.json())
+      .then(d => { if (d?.error) show('Swipe failed to save'); })
+      .catch(() => show('Swipe failed to save — check connection'));
     if (movieIdx + 1 < content.length) {
       setMovieIdx(p => p + 1);
     } else {
-      // Mark this player as done
-      fetch('/api/swipe',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionToken:token})});
+      markDone(token);
       setScreen('orgReveal');
     }
   };
 
-  // ── Reveal results (host only) ──
   const revealResults = async () => {
     if (revealLoading) return;
     setRevealLoading(true);
     try {
-      // First fetch current results so matchIds are populated for history
       const rRes = await fetch(`/api/results/${code}`);
       const rData = await rRes.json();
       setResultData(rData);
 
-      const { data:{user} } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       let historyEntries = [];
       if (user) {
-        const matchSet = new Set(rData.matchIds||[]);
+        const matchSet = new Set(rData.matchIds || []);
         for (const item of content) {
           historyEntries.push({
             user_id: user.id, room_code: code, content_id: item.id,
@@ -230,7 +291,7 @@ export default function RoomPage() {
           });
         }
       }
-      await fetch(`/api/results/${code}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'results',historyEntries})});
+      await fetch(`/api/results/${code}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'results', historyEntries }) });
       setShowConf(true);
       setScreen('results');
     } finally {
@@ -239,341 +300,407 @@ export default function RoomPage() {
   };
 
   const myPlayer = players.find(p => p.session_token === myToken) || players[0];
-  const progress = content.length>0?(movieIdx/content.length)*100:0;
-  const movieCount = content.filter(c=>c.type==='movie').length;
-  const seriesCount = content.filter(c=>c.type==='series').length;
-  const canStart = platforms.length>0 && players.length>=2 && content.length>0 && contentLoaded;
+  const progress = content.length > 0 ? (movieIdx / content.length) * 100 : 0;
+  const movieCount = content.filter(c => c.type === 'movie').length;
+  const seriesCount = content.filter(c => c.type === 'series').length;
+  const canStart = platforms.length > 0 && players.length >= 2 && content.length > 0 && contentLoaded;
   const categories = getCategoriesForType(contentType);
 
-  // ═══════════════════════════════════════
-  //  SCREENS
-  // ═══════════════════════════════════════
+  const CodePill = () => (
+    <div className="flex items-center gap-2 rounded-full border border-hair bg-elevated px-3.5 py-1.5">
+      <span className="text-ink-3 text-[10px] font-bold tracking-[1.5px]">ROOM</span>
+      <span className="wordmark text-accent text-[16px] tracking-[2px]">{code}</span>
+    </div>
+  );
+  const Avatar = ({ p, size = 40, ring }) => (
+    <div className="rounded-xl grid place-items-center shrink-0" style={{ width: size, height: size, fontSize: size * 0.44, background: `${p.color}22`, border: `2px solid ${ring || p.color + '55'}` }}>{p.avatar}</div>
+  );
+  const TypeBadge = ({ type, size = 11 }) => (
+    <span className={`badge ${type === 'series' ? 'badge-series' : 'badge-movie'}`}>{type === 'series' ? <IconTv size={size} /> : <IconFilm size={size} />}</span>
+  );
 
-  if (screen==='loading') return <><StarBG/><div className="relative z-10 min-h-screen flex items-center justify-center"><div className="spinner"/></div></>;
+  // ═══════════════════════════════════════
+  if (screen === 'loading') return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
 
-  // ── WAITING (non-host) ──
-  if (screen==='waiting') return (<><StarBG/>
-    <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 max-w-[480px] mx-auto text-center" style={{animation:'slideUp .6s ease'}}>
-      <div className="w-20 h-20 rounded-3xl bg-gold/10 border-2 border-gold/30 flex items-center justify-center text-[40px] mb-5" style={{animation:'pulseGlow 2.5s ease-in-out infinite'}}>⏳</div>
-      <h2 className="text-2xl font-black mb-2" style={{fontFamily:"'Playfair Display',serif"}}>You're in!</h2>
-      <div className="glass !rounded-full px-5 py-2.5 inline-block mb-4"><span className="text-white/35 text-[11px] font-semibold tracking-wide">ROOM </span><span className="text-gold text-xl font-black tracking-[3px]" style={{fontFamily:"'Bebas Neue'"}}>{code}</span></div>
-      <p className="text-white/35 text-sm mb-2">Waiting for the host to start...</p>
-      <div className="flex gap-2 mt-4 flex-wrap justify-center">{players.map(p=>(
-        <div key={p.id} className="flex flex-col items-center gap-1"><div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{background:`${p.color}22`,border:`2px solid ${p.color}44`}}>{p.avatar}</div><span className="text-white/30 text-[10px]">{p.name.slice(0,8)}</span></div>
+  // ── WAITING ──
+  if (screen === 'waiting') return (<><CinematicBG variant="charcoal" />
+    <div className="relative z-10 min-h-[100dvh] flex flex-col items-center justify-center px-5 max-w-[460px] mx-auto text-center rise">
+      <div className="app-badge floaty mb-6"><IconClock size={40} /></div>
+      <h2 className="text-[26px] font-bold text-white mb-2">You're in!</h2>
+      <div className="mb-4"><CodePill /></div>
+      <p className="text-white/50 text-sm mb-6">Waiting for the host to start…</p>
+      <div className="flex gap-3 flex-wrap justify-center">{players.map(p => (
+        <div key={p.id} className="flex flex-col items-center gap-1.5"><Avatar p={p} /><span className="text-white/40 text-[10px]">{p.name.slice(0, 8)}</span></div>
       ))}</div>
     </div>
   </>);
 
-  // ── CONTENT LOADING (for non-hosts transitioning to swiping) ──
-  if (contentLoading) return (<><StarBG/>
-    <div className="relative z-10 min-h-screen flex flex-col items-center justify-center gap-4">
-      <div className="spinner"/>
-      <p className="text-white/40 text-sm">Loading content...</p>
+  if (contentLoading) return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] flex flex-col items-center justify-center gap-4"><div className="spinner" /><p className="text-ink-2 text-sm">Loading content…</p></div></>);
+
+  // ── ROOM NOT FOUND (invalid or expired link) ──
+  if (screen === 'notFound') return (<><CinematicBG variant="content" />
+    <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">
+      <div className="card p-8 max-w-[380px] w-full text-center rise">
+        <span className="tile tile-accent mx-auto mb-4 !w-12 !h-12"><IconClose size={22} /></span>
+        <h2 className="text-ink text-[19px] font-bold mb-1.5">Room not found</h2>
+        <p className="text-ink-3 text-[13.5px] mb-5">This link is invalid or the room no longer exists. Ask your host for a fresh invite.</p>
+        <button onClick={() => router.push('/')} className="btn btn-primary btn-block">Go home</button>
+      </div>
+    </div>
+  </>);
+
+  // ── LOAD ERROR (deck could not be resolved on rejoin) ──
+  if (screen === 'loadError') return (<><CinematicBG variant="content" />
+    <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">
+      <div className="card p-8 max-w-[380px] w-full text-center rise">
+        <span className="tile tile-accent mx-auto mb-4 !w-12 !h-12"><IconClose size={22} /></span>
+        <h2 className="text-ink text-[19px] font-bold mb-1.5">Couldn't load the game</h2>
+        <p className="text-ink-3 text-[13.5px] mb-5">Check your connection and try again.</p>
+        <button onClick={() => window.location.reload()} className="btn btn-primary btn-block">Try again</button>
+      </div>
     </div>
   </>);
 
   // ═══════════════════════════════════════
-  //  LOBBY — The main config screen
+  //  LOBBY
   // ═══════════════════════════════════════
-  if (screen==='lobby') return (<><StarBG/>
-    <div className="relative z-10 min-h-screen flex flex-col items-center px-4 py-5 pb-10 max-w-[480px] mx-auto">
-
-      {/* Header */}
-      <div className="w-full flex items-center justify-between mb-5" style={{animation:'slideUp .4s ease'}}>
-        <button onClick={()=>router.push('/')} className="text-white/40 text-xl">←</button>
-        <div className="glass !rounded-full px-4 py-2 flex items-center gap-2"><span className="text-white/30 text-[10px] font-bold tracking-[1.5px]">ROOM</span><span className="text-gold text-lg font-black tracking-[3px]" style={{fontFamily:"'Bebas Neue'"}}>{code}</span></div>
-      </div>
-
-      {/* ── 1. INVITE ── */}
-      <div className="glass p-5 w-full mb-4" style={{borderColor:'rgba(212,168,67,.15)',background:'linear-gradient(135deg,rgba(212,168,67,.05),rgba(212,168,67,.01))',animation:'slideUp .5s ease .08s both'}}>
-        <div className="flex items-center gap-2.5 mb-3"><span className="text-lg">📨</span><h3 className="text-[16px] font-extrabold text-gold" style={{fontFamily:"'Playfair Display',serif"}}>Invite Friends</h3></div>
-        <div className="bg-black/30 rounded-xl px-3.5 py-2.5 mb-3 border border-white/[.06]"><span className="text-white/40 text-[11px] font-mono truncate block">{inviteLink}</span></div>
-        <div className="flex gap-2"><button onClick={shareInvite} className="btn-gold !p-3 !text-[12px] flex-1">Share ↗</button><button onClick={copyInvite} className="btn-glass !p-3 !text-[12px] flex-1">Copy 📋</button></div>
-      </div>
-
-      {/* ── 2. MEMBERS ── */}
-      <div className="w-full mb-5" style={{animation:'slideUp .5s ease .12s both'}}>
-        <div className="flex items-center justify-between mb-3"><h3 className="text-[16px] font-extrabold" style={{fontFamily:"'Playfair Display',serif"}}>Members ({players.length})</h3><span className="text-white/20 text-[11px]">{players.length}/12</span></div>
-        <div className="flex flex-col gap-2">{players.map(p=>(
-          <div key={p.id} className="glass !p-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{background:`${p.color}22`,border:`2px solid ${p.color}44`}}>{p.avatar}</div>
-            <span className="text-white text-[15px] font-bold flex-1">{p.name}</span>
-            {p.is_host&&<span className="text-gold text-[10px] font-bold bg-gold/15 px-2 py-0.5 rounded-md">HOST</span>}
-          </div>
-        ))}</div>
-        {showAdd
-          ? <div className="flex gap-2 mt-2.5"><input autoFocus value={addName} onChange={e=>setAddName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addName&&addFriend(addName)} placeholder="Friend's name" className="inp !p-3 !text-sm flex-1"/><button onClick={()=>addName&&addFriend(addName)} className="bg-gradient-to-r from-gold to-gold-light text-surface font-extrabold rounded-xl px-4 text-sm">Add</button><button onClick={()=>{setShowAdd(false);setAddName('');}} className="btn-glass !w-auto !p-3 !text-sm">✕</button></div>
-          : <button onClick={()=>setShowAdd(true)} className="btn-glass mt-2.5 flex items-center justify-center gap-2 !p-3"><span className="text-lg leading-none">+</span> Add Friend</button>
-        }
-      </div>
-
-      {/* ═══ 3. WHAT TO WATCH ═══ */}
-      <div className="w-full mb-5" style={{animation:'slideUp .5s ease .16s both'}}>
-        <h3 className="text-[17px] font-extrabold mb-1" style={{fontFamily:"'Playfair Display',serif"}}>What does your group want?</h3>
-        <p className="text-white/25 text-[12px] mb-3">Choose whether you're picking a movie, a web series, or both</p>
-        <div className="flex flex-col gap-2">
-          {CONTENT_TYPES.map(t => {
-            const sel = contentType === t.id;
-            const colors = { movies:'from-gold/20 to-gold/5 border-gold/40', series:'from-purple-500/20 to-purple-500/5 border-purple-500/40', all:'from-blue-500/20 to-blue-500/5 border-blue-500/40' };
-            const icons = { movies:'🍿', series:'📺', all:'🎬' };
-            return (
-              <button key={t.id} onClick={()=>setContentType(t.id)}
-                className={`w-full rounded-2xl p-4 text-left transition-all ${sel?`bg-gradient-to-r ${colors[t.id]} border`:'bg-white/[.02] border border-white/[.06] hover:bg-white/[.04]'}`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{icons[t.id]}</span>
-                  <div className="flex-1">
-                    <div className={`text-[15px] font-bold ${sel?'text-white':'text-white/50'}`}>{t.label}</div>
-                    <div className={`text-[12px] ${sel?'text-white/50':'text-white/25'}`}>{t.desc}</div>
-                  </div>
-                  {sel && <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-sm">✓</div>}
-                </div>
-              </button>
-            );
-          })}
+  if (screen === 'lobby') return (<><CinematicBG variant="content" />
+    <div className="relative z-10 min-h-[100dvh]">
+      <header className="sticky top-0 z-20 nav-blur">
+        <div className="max-w-content mx-auto px-5 h-16 flex items-center justify-between">
+          <button onClick={() => router.push('/')} className="btn btn-secondary btn-sm !w-auto !px-2.5" aria-label="Back"><IconChevronLeft size={18} /></button>
+          <span className="wordmark text-ink text-[17px] hidden sm:block">FlickPick</span>
+          <CodePill />
         </div>
-      </div>
+      </header>
 
-      {/* ═══ 4. CATEGORY ═══ */}
-      <div className="w-full mb-5" style={{animation:'slideUp .5s ease .2s both'}}>
-        <h3 className="text-[16px] font-extrabold mb-1" style={{fontFamily:"'Playfair Display',serif"}}>
-          {contentType==='movies'?'Movie Category':contentType==='series'?'Series Category':'Category'}
-        </h3>
-        <p className="text-white/25 text-[12px] mb-3">
-          {contentType==='movies'?'What kind of movies?':contentType==='series'?'What kind of web series?':'What kind of content?'}
-        </p>
-        <div className="flex flex-col gap-1.5">
-          {categories.map(c => {
-            const sel = category === c.id;
-            return (
-              <button key={c.id} onClick={()=>setCategory(c.id)}
-                className={`w-full rounded-xl px-4 py-3 text-left flex items-center gap-3 transition-all ${sel?'bg-gold/15 border border-gold/30':'bg-white/[.02] border border-white/[.06] hover:bg-white/[.04]'}`}>
-                <span className="text-lg">{c.label.split(' ')[0]}</span>
-                <div className="flex-1">
-                  <span className={`text-[13px] font-bold ${sel?'text-gold':'text-white/40'}`}>{c.label.split(' ').slice(1).join(' ')}</span>
-                  <span className={`text-[11px] ml-2 ${sel?'text-gold/50':'text-white/20'}`}>{c.desc}</span>
-                </div>
-                {sel && <span className="text-gold text-sm">●</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <main className="max-w-content mx-auto px-5 pb-28 lg:pb-16 pt-4">
+        <div className="lg:grid lg:grid-cols-[340px_1fr] lg:gap-7 lg:items-start">
 
-      {/* ── 5. PLATFORMS ── */}
-      <div className="w-full mb-5" style={{animation:'slideUp .5s ease .24s both'}}>
-        <h3 className="text-[16px] font-extrabold mb-3" style={{fontFamily:"'Playfair Display',serif"}}>Streaming Platforms</h3>
-        <div className="grid grid-cols-3 gap-2">{OTT_PLATFORMS.map(p=>{const sel=platforms.includes(p.name);return(
-          <button key={p.name} onClick={()=>setPlatforms(prev=>prev.includes(p.name)?prev.filter(x=>x!==p.name):[...prev,p.name])}
-            className="rounded-2xl py-3.5 px-2 flex flex-col items-center gap-1 transition-all"
-            style={{background:sel?p.bg:'rgba(255,255,255,.03)',border:sel?'2px solid transparent':'1px solid rgba(255,255,255,.08)',transform:sel?'scale(1.03)':'scale(1)',boxShadow:sel?`0 6px 24px ${p.color}25`:'none'}}>
-            <span className={`text-[11px] font-extrabold text-center leading-tight ${sel?'text-white':'text-white/40'}`}>{p.name}</span>
-            {sel&&<span className="text-sm">✓</span>}
-          </button>
-        );})}</div>
-      </div>
-
-      {/* ── 6. GENRE FILTER ── */}
-      <div className="w-full mb-5" style={{animation:'slideUp .5s ease .28s both'}}>
-        <h3 className="text-[15px] font-bold text-white/50 mb-2" style={{fontFamily:"'Playfair Display',serif"}}>Genre Filter</h3>
-        <div className="flex gap-1.5 flex-wrap">{GENRES.map(g=>(
-          <button key={g} onClick={()=>setGenre(g)} className={`rounded-full px-3 py-1 text-[11px] font-bold transition-all ${genre===g?'bg-gold/20 border border-gold/50 text-gold':'bg-white/[.04] border border-white/[.06] text-white/30'}`}>{g}</button>
-        ))}</div>
-      </div>
-
-      {/* ═══ 7. LOAD & PREVIEW ═══ */}
-      <div className="w-full mb-5" style={{animation:'slideUp .5s ease .32s both'}}>
-        <button onClick={loadContent} disabled={contentLoading||platforms.length===0} className="btn-glass flex items-center justify-center gap-2">
-          {contentLoading
-            ? <><div className="spinner !w-5 !h-5 !border-2"/>Loading from TMDB...</>
-            : `🔍 Load ${contentType==='movies'?'Movies':contentType==='series'?'Web Series':'Movies & Series'}`}
-        </button>
-
-        {contentLoaded && content.length > 0 && (
-          <div className="mt-4 glass p-4" style={{animation:'slideUp .4s ease'}}>
-            <div className="flex items-center gap-3 mb-3 flex-wrap">
-              <span className="text-green-500 text-[13px] font-bold">✓ {content.length} titles ready</span>
-              {movieCount > 0 && <span className="type-badge-movie text-[10px] font-bold px-2 py-0.5 rounded-md">🍿 {movieCount} Movie{movieCount!==1?'s':''}</span>}
-              {seriesCount > 0 && <span className="type-badge-series text-[10px] font-bold px-2 py-0.5 rounded-md">📺 {seriesCount} Series</span>}
+          {/* LEFT */}
+          <div className="lg:sticky lg:top-20 flex flex-col gap-4 mb-6 lg:mb-0">
+            <div className="card p-5 rise">
+              <div className="flex items-center gap-2.5 mb-3"><span className="tile tile-accent !w-8 !h-8 !rounded-[10px]"><IconShare size={16} /></span><h3 className="text-[16px] font-semibold text-ink">Invite friends</h3></div>
+              <div className="rounded-xl px-3.5 py-2.5 mb-3 border border-hair" style={{ background: 'var(--surface-2)' }}><span className="text-ink-2 text-[12px] font-mono truncate block">{inviteLink}</span></div>
+              <div className="flex gap-2">
+                <button onClick={shareInvite} className="btn btn-primary btn-sm flex-1"><IconShare size={16} />Share</button>
+                <button onClick={copyInvite} className="btn btn-secondary btn-sm flex-1"><IconCopy size={16} />Copy</button>
+              </div>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-2" style={{scrollSnapType:'x mandatory'}}>
-              {content.slice(0,10).map(c=>(
-                <div key={c.id} className="shrink-0 w-[72px]" style={{scrollSnapAlign:'start'}}>
-                  <div className="relative">
-                    <img src={c.poster} alt="" className="w-[72px] h-[104px] rounded-lg object-cover border border-white/[.06]"/>
-                    <div className={`absolute top-1 left-1 rounded px-1 py-0.5 text-[7px] font-bold ${c.type==='series'?'type-badge-series':'type-badge-movie'}`}>
-                      {c.type==='series'?'📺':'🍿'}
-                    </div>
-                  </div>
-                  <p className="text-white/30 text-[9px] mt-1 truncate font-medium">{c.title}</p>
-                  {c.type==='series' && c.seasons>0 && <p className="text-purple-400/60 text-[8px]">{c.seasons}S · {c.episodes||'?'}Ep</p>}
-                  {c.type==='movie' && c.duration && <p className="text-gold/50 text-[8px]">{c.duration}</p>}
+
+            <div className="card p-5 rise" style={{ animationDelay: '.05s' }}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[16px] font-semibold text-ink">Members</h3>
+                <span className="badge badge-movie">{players.length}/12</span>
+              </div>
+              <div className="flex flex-col gap-2">{players.map(p => (
+                <div key={p.id} className="flex items-center gap-3 rounded-xl px-2.5 py-2" style={{ background: 'var(--surface-2)' }}>
+                  <Avatar p={p} size={36} />
+                  <span className="text-ink text-[14px] font-semibold flex-1 truncate">{p.name}</span>
+                  {p.is_host && <span className="badge badge-movie">HOST</span>}
                 </div>
-              ))}
+              ))}</div>
+              {showAdd
+                ? <div className="flex gap-2 mt-3"><input autoFocus value={addName} onChange={e => setAddName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addName && addFriend(addName)} placeholder="Friend's name" className="field !h-11 flex-1" /><button onClick={() => addName && addFriend(addName)} className="btn btn-primary btn-sm !w-auto">Add</button><button onClick={() => { setShowAdd(false); setAddName(''); }} className="btn btn-secondary btn-sm !w-auto !px-2.5"><IconClose size={16} /></button></div>
+                : <button onClick={() => setShowAdd(true)} className="btn btn-secondary btn-sm btn-block mt-3"><IconPlus size={16} />Add friend</button>
+              }
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ═══ 8. START BUTTON ═══ */}
-      <div className="w-full pb-4" style={{animation:'slideUp .5s ease .36s both'}}>
-        <button onClick={startSwiping} disabled={!canStart} className="btn-gold">
-          {contentType==='movies' ? `Start Swiping · ${movieCount} Movies 🍿`
-           : contentType==='series' ? `Start Swiping · ${seriesCount} Series 📺`
-           : `Start Swiping · ${content.length} Titles 🎬`}
-        </button>
-        {!canStart && <p className="text-white/20 text-[11px] text-center mt-2">
-          {platforms.length===0?'Select at least one platform':players.length<2?'Add at least 2 players':!contentLoaded?'Load content first':''}
-        </p>}
+          {/* RIGHT */}
+          <div className="flex flex-col gap-7">
+            {/* 1. What to watch */}
+            <section className="rise">
+              <h3 className="text-[19px] font-bold text-ink mb-1">What does your group want?</h3>
+              <p className="text-ink-3 text-[13px] mb-3">Pick a movie, a web series, or both.</p>
+              <div className="grid gap-2.5 sm:grid-cols-3">
+                {CONTENT_TYPES.map(t => {
+                  const sel = contentType === t.id; const Ic = CT_ICON[t.id] || IconFilm;
+                  return (
+                    <button key={t.id} onClick={() => setContentType(t.id)} className="text-left rounded-2xl p-4 border transition-all"
+                      style={{ borderColor: sel ? 'var(--accent)' : 'var(--border)', background: sel ? 'var(--accent-soft)' : 'var(--bg-elevated)', boxShadow: sel ? '0 0 0 3px var(--accent-soft)' : 'none' }}>
+                      <span className="tile mb-3" style={{ background: sel ? 'rgba(10,132,255,.2)' : 'var(--surface-2)', color: sel ? '#4aa3ff' : 'var(--text-secondary)' }}><Ic size={20} /></span>
+                      <div className="text-[14px] font-semibold text-ink">{t.label}</div>
+                      <div className="text-[11px] text-ink-3 mt-0.5">{t.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* 2. Category */}
+            <section className="rise" style={{ animationDelay: '.05s' }}>
+              <h3 className="text-[17px] font-bold text-ink mb-1">{contentType === 'movies' ? 'Movie category' : contentType === 'series' ? 'Series category' : 'Category'}</h3>
+              <p className="text-ink-3 text-[13px] mb-3">{contentType === 'movies' ? 'What kind of movies?' : contentType === 'series' ? 'What kind of web series?' : 'What kind of content?'}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {categories.map(c => {
+                  const sel = category === c.id; const Ic = CAT_ICON[c.id] || IconSparkles;
+                  return (
+                    <button key={c.id} onClick={() => setCategory(c.id)} className="rounded-xl px-3.5 py-3 text-left flex items-center gap-3 border transition-all"
+                      style={{ borderColor: sel ? 'var(--accent)' : 'var(--border)', background: sel ? 'var(--accent-soft)' : 'var(--bg-elevated)' }}>
+                      <span className="w-9 h-9 rounded-[11px] grid place-items-center shrink-0" style={{ background: sel ? 'rgba(10,132,255,.2)' : 'var(--surface-2)', color: sel ? '#4aa3ff' : 'var(--text-secondary)' }}><Ic size={17} /></span>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[13px] font-semibold ${sel ? 'text-accent' : 'text-ink'}`}>{c.label}</div>
+                        <div className="text-[11px] text-ink-3 truncate">{c.desc}</div>
+                      </div>
+                      {sel && <IconCheck size={16} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* 3. Deck size */}
+            <section className="rise" style={{ animationDelay: '.08s' }}>
+              <h3 className="text-[17px] font-bold text-ink mb-1">Deck size</h3>
+              <p className="text-ink-3 text-[13px] mb-3">How many titles your group swipes through</p>
+              {contentType !== 'series' && (
+                <div className={contentType === 'all' ? 'mb-3' : ''}>
+                  {contentType === 'all' && <span className="label">Movies</span>}
+                  <div className="flex gap-2 flex-wrap">{DECK_SIZES.map(n => (
+                    <button key={n} onClick={() => setDeckMovies(n)} className="chip" data-active={deckMovies === n}>{n}</button>
+                  ))}</div>
+                </div>
+              )}
+              {contentType !== 'movies' && (
+                <div>
+                  {contentType === 'all' && <span className="label">Web series</span>}
+                  <div className="flex gap-2 flex-wrap">{DECK_SIZES.map(n => (
+                    <button key={n} onClick={() => setDeckSeries(n)} className="chip" data-active={deckSeries === n}>{n}</button>
+                  ))}</div>
+                </div>
+              )}
+            </section>
+
+            {/* 4. Platforms */}
+            <section className="rise" style={{ animationDelay: '.1s' }}>
+              <h3 className="text-[17px] font-bold text-ink mb-3">Streaming platforms</h3>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">{OTT_PLATFORMS.map(p => { const sel = platforms.includes(p.name); return (
+                <button key={p.name} onClick={() => setPlatforms(prev => prev.includes(p.name) ? prev.filter(x => x !== p.name) : [...prev, p.name])}
+                  className="rounded-2xl py-3.5 px-2 flex flex-col items-center gap-1 transition-all border"
+                  style={{ background: sel ? p.bg : 'var(--bg-elevated)', borderColor: sel ? 'transparent' : 'var(--border)', transform: sel ? 'scale(1.02)' : 'none', boxShadow: sel ? `0 6px 22px ${p.color}44` : 'none' }}>
+                  <span className={`text-[11px] font-bold text-center leading-tight ${sel ? 'text-white' : 'text-ink-2'}`}>{p.name}</span>
+                  {sel && <IconCheck size={14} />}
+                </button>
+              ); })}</div>
+            </section>
+
+            {/* 4. Genre */}
+            <section className="rise" style={{ animationDelay: '.15s' }}>
+              <h3 className="text-[15px] font-bold text-ink-2 mb-2.5">Genre filter</h3>
+              <div className="flex gap-2 flex-wrap">{GENRES.map(g => (
+                <button key={g} onClick={() => setGenre(g)} className="chip" data-active={genre === g}>{g}</button>
+              ))}</div>
+            </section>
+
+            {/* 5. Load + preview */}
+            <section className="rise" style={{ animationDelay: '.2s' }}>
+              <button onClick={loadContent} disabled={contentLoading || platforms.length === 0} className="btn btn-secondary btn-block btn-lg">
+                {contentLoading ? <><span className="spinner !w-5 !h-5 !border-2" />Loading from TMDB…</> : <><IconSparkles size={18} />Load {contentType === 'movies' ? 'movies' : contentType === 'series' ? 'web series' : 'movies & series'}</>}
+              </button>
+
+              {contentLoaded && content.length > 0 && (
+                <div className="mt-4 card p-4 rise">
+                  <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+                    <span className="badge badge-success"><IconCheck size={11} />{content.length} titles ready</span>
+                    {movieCount > 0 && <span className="badge badge-movie"><IconFilm size={11} />{movieCount} Movie{movieCount !== 1 ? 's' : ''}</span>}
+                    {seriesCount > 0 && <span className="badge badge-series"><IconTv size={11} />{seriesCount} Series</span>}
+                  </div>
+                  <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollSnapType: 'x mandatory' }}>
+                    {content.slice(0, 12).map(c => (
+                      <div key={c.id} className="shrink-0 w-[76px]" style={{ scrollSnapAlign: 'start' }}>
+                        <div className="relative">
+                          <img src={c.poster} alt="" className="w-[76px] h-[110px] rounded-lg object-cover border border-hair" />
+                          <span className={`badge absolute top-1 left-1 !h-auto !px-1 !py-0.5 ${c.type === 'series' ? 'badge-series' : 'badge-movie'}`}>{c.type === 'series' ? <IconTv size={9} /> : <IconFilm size={9} />}</span>
+                        </div>
+                        <p className="text-ink-3 text-[9px] mt-1 truncate font-medium">{c.title}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      </main>
+
+      {/* Sticky start bar */}
+      <div className="sticky bottom-0 z-20 pt-2">
+        <div className="max-w-content mx-auto px-5 pb-5">
+          <div className="glass p-3 rounded-2xl">
+            <button onClick={startSwiping} disabled={!canStart} className="btn btn-primary btn-block btn-lg">
+              <IconPlay size={18} />{contentType === 'movies' ? `Start swiping · ${movieCount} movies` : contentType === 'series' ? `Start swiping · ${seriesCount} series` : `Start swiping · ${content.length} titles`}
+            </button>
+            {!canStart && <p className="text-ink-3 text-[11px] text-center mt-2">{platforms.length === 0 ? 'Select at least one platform' : players.length < 2 ? 'Add at least 2 players' : !contentLoaded ? 'Load content first' : ''}</p>}
+          </div>
+        </div>
       </div>
     </div>
-    <Toast msg={toast.msg} visible={toast.v}/>
+    <Toast msg={toast.msg} visible={toast.v} />
   </>);
 
   // ── SWIPING ──
-  if (screen==='swiping') {
-    return (<><StarBG/><div className="relative z-10 min-h-screen flex flex-col items-center px-4 py-5 max-w-[480px] mx-auto">
-      <div className="w-full flex items-center justify-between mb-1.5" style={{animation:'fadeIn .4s ease'}}>
+  if (screen === 'swiping') return (<><CinematicBG variant="content" />
+    <div className="relative z-10 min-h-[100dvh] flex flex-col items-center px-4 py-4 max-w-[460px] mx-auto w-full">
+      <div className="w-full flex items-center justify-between mb-2 fade">
         <div className="flex items-center gap-2.5">
           {myPlayer && <>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{background:`${myPlayer.color}22`,border:`2px solid ${myPlayer.color}44`}}>{myPlayer.avatar}</div>
-            <div><div className="text-white text-sm font-bold">{myPlayer.name}</div><div className="text-white/30 text-[11px]">{content.length-movieIdx} left</div></div>
+            <Avatar p={myPlayer} size={38} />
+            <div><div className="text-ink text-sm font-semibold">{myPlayer.name}</div><div className="text-ink-3 text-[11px]">{content.length - movieIdx} left</div></div>
           </>}
         </div>
-        <div className="flex items-center gap-1.5">{players.map(p=>(
-          <div key={p.id} className="w-1.5 h-1.5 rounded-full" style={{background:p.session_token===myToken?'#D4A843':'rgba(255,255,255,.1)'}}/>
+        <div className="flex items-center gap-1.5">{players.map(p => (
+          <div key={p.id} className="w-1.5 h-1.5 rounded-full" style={{ background: p.session_token === myToken ? 'var(--accent)' : 'var(--border-strong)' }} />
         ))}</div>
       </div>
-      <div className="w-full h-[3px] bg-white/[.05] rounded mb-3 overflow-hidden"><div className="h-full rounded transition-all duration-300" style={{width:`${progress}%`,background:'linear-gradient(90deg,#D4A843,#E8C76A)'}}/></div>
-      <div className="relative w-full flex justify-center" style={{height:570}}>
-        {content.slice(movieIdx,movieIdx+2).reverse().map((item,i,arr)=>(
-          <SwipeCard key={`${item.id}`} item={item} isTop={i===arr.length-1} onSwipe={handleSwipe}/>
+      <div className="w-full h-[4px] rounded-full mb-4 overflow-hidden" style={{ background: 'var(--surface-2)' }}><div className="h-full rounded-full transition-all duration-300" style={{ width: `${progress}%`, background: 'var(--accent)' }} /></div>
+      <div className="relative w-full flex justify-center" style={{ height: 'clamp(560px, 82vh, 660px)' }}>
+        {content.slice(movieIdx, movieIdx + 2).reverse().map((item, i, arr) => (
+          <SwipeCard key={`${item.id}`} item={item} isTop={i === arr.length - 1} onSwipe={handleSwipe} />
         ))}
-        {movieIdx>=content.length && <div className="text-center mt-16" style={{animation:'slideUp .6s ease'}}><span className="text-[60px]">✅</span><h3 className="text-white text-xl font-black mt-4" style={{fontFamily:"'Playfair Display',serif"}}>All done!</h3></div>}
+        {movieIdx >= content.length && <div className="text-center mt-16 rise"><span className="app-badge mx-auto"><IconCheck size={40} /></span><h3 className="text-ink text-xl font-bold mt-4">All done!</h3></div>}
       </div>
-    </div></>);
-  }
+    </div>
+  </>);
 
   // ── DONE / WAITING FOR REVEAL ──
-  if (screen==='orgReveal') return (<><StarBG/><div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 max-w-[340px] mx-auto text-center" style={{animation:'slideUp .8s ease'}}>
-    {isHost ? (<>
-      <div className="text-[64px] mb-4" style={{animation:'float 3s ease-in-out infinite'}}>🥁</div>
-      <h2 className="text-3xl font-black mb-2.5" style={{fontFamily:"'Playfair Display',serif"}}>All Done!</h2>
-      <p className="text-white/40 text-sm mb-5">You swiped {content.length} titles</p>
-      <div className="flex justify-center gap-2 mb-8 flex-wrap">{players.map(p=>(
-        <div key={p.id} className="flex flex-col items-center gap-1"><div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl" style={{background:`${p.color}22`,border:'2px solid rgba(52,199,89,.4)'}}>{p.avatar}</div><span className="text-white/35 text-[10px] font-semibold">{p.name.slice(0,8)}</span></div>
-      ))}</div>
-      <button onClick={revealResults} disabled={revealLoading} className="btn-gold max-w-[320px]" style={{animation:revealLoading?'none':'pulseGlow 2s ease-in-out infinite'}}>{revealLoading?'Calculating...':'✦ Reveal Results ✦'}</button>
-    </>) : (<>
-      <div className="text-[64px] mb-4" style={{animation:'float 3s ease-in-out infinite'}}>✅</div>
-      <h2 className="text-3xl font-black mb-2.5" style={{fontFamily:"'Playfair Display',serif"}}>You're Done!</h2>
-      <p className="text-white/40 text-sm mb-2">Waiting for the host to reveal results...</p>
-      <div className="w-20 h-1 bg-gold/30 rounded-full mx-auto mt-4 overflow-hidden"><div className="h-full bg-gold rounded-full" style={{animation:'slideRight 1.5s ease-in-out infinite'}}/></div>
-    </>)}
-  </div></>);
+  if (screen === 'orgReveal') return (<><CinematicBG variant="charcoal" />
+    <div className="relative z-10 min-h-[100dvh] flex flex-col items-center justify-center px-5 max-w-[380px] mx-auto text-center rise">
+      {isHost ? (<>
+        <div className="app-badge floaty mb-6"><IconSparkles size={42} /></div>
+        <h2 className="text-[30px] font-bold text-white mb-2">All done!</h2>
+        <p className="text-white/50 text-sm mb-6">You swiped {content.length} titles</p>
+        <div className="flex justify-center gap-3 mb-8 flex-wrap">{players.map(p => (
+          <div key={p.id} className="flex flex-col items-center gap-1.5"><Avatar p={p} size={44} ring="var(--success)" /><span className="text-white/50 text-[10px] font-semibold">{p.name.slice(0, 8)}</span></div>
+        ))}</div>
+        <button onClick={revealResults} disabled={revealLoading} className="btn btn-primary btn-lg btn-block" style={{ animation: revealLoading ? 'none' : 'pulsering 2s ease-in-out infinite' }}>{revealLoading ? 'Calculating…' : <><IconTrophy size={19} />Reveal results</>}</button>
+      </>) : (<>
+        <div className="app-badge floaty mb-6"><IconCheck size={42} /></div>
+        <h2 className="text-[30px] font-bold text-white mb-2">You're done!</h2>
+        <p className="text-white/50 text-sm mb-5">Waiting for the host to reveal results…</p>
+        <div className="w-40 h-1.5 rounded-full mx-auto overflow-hidden" style={{ background: 'rgba(255,255,255,.14)' }}><div className="h-full w-1/3 rounded-full" style={{ background: 'var(--accent)', animation: 'indeterminate 1.4s ease-in-out infinite' }} /></div>
+      </>)}
+    </div>
+  </>);
 
   // ═══════════════════════════════════════
   //  RESULTS
   // ═══════════════════════════════════════
-  if (screen==='results' && resultData) {
+  if (screen === 'results' && resultData) {
     const { matchIds, ranked, individual } = resultData;
     const rPlayers = resultData.players || players;
-    const matchItems = content.filter(c=>(matchIds||[]).map(Number).includes(Number(c.id)));
+    const matchItems = content.filter(c => (matchIds || []).map(Number).includes(Number(c.id)));
 
-    return (<><StarBG/>
-      {showConf&&<div className="fixed inset-0 z-[200] pointer-events-none overflow-hidden">{COLORS.flatMap((c,ci)=>Array.from({length:5},(_,i)=>(
-        <div key={`${ci}-${i}`} className="absolute" style={{width:6+i*2,height:6+i*2,background:c,borderRadius:i%2?'50%':'2px',left:`${(ci*8+i*15)%100}%`,top:-20,animation:`confetti ${2+i*.5}s ease-in forwards`,animationDelay:`${ci*.15+i*.2}s`,opacity:.85}}/>
+    return (<><CinematicBG variant="content" />
+      {showConf && <div className="fixed inset-0 z-[200] pointer-events-none overflow-hidden">{COLORS.flatMap((c, ci) => Array.from({ length: 5 }, (_, i) => (
+        <div key={`${ci}-${i}`} className="absolute" style={{ width: 6 + i * 2, height: 6 + i * 2, background: c, borderRadius: i % 2 ? '50%' : '2px', left: `${(ci * 8 + i * 15) % 100}%`, top: -20, animation: `confetti ${2 + i * 0.5}s ease-in forwards`, animationDelay: `${ci * 0.15 + i * 0.2}s`, opacity: 0.85 }} />
       )))}</div>}
 
-      <div className="relative z-10 min-h-screen flex flex-col items-center px-4 py-5 pb-12 max-w-[480px] mx-auto" style={{animation:'slideUp .6s ease'}}>
-        <h2 className="text-[32px] font-black text-center mt-3 mb-1" style={{fontFamily:"'Playfair Display',serif",background:'linear-gradient(135deg,#fff,#D4A843,#E8C76A)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Results 🎉</h2>
-        <p className="text-white/30 text-[13px] text-center mb-6">{rPlayers.length} players · {content.length} titles</p>
+      <div className="relative z-10 min-h-[100dvh] max-w-content mx-auto px-5 py-6 pb-16 rise">
+        <div className="text-center mb-6">
+          <span className="app-badge mx-auto mb-4"><IconTrophy size={40} /></span>
+          <h2 className="wordmark text-[34px] text-ink">Results</h2>
+          <p className="text-ink-3 text-[13px] mt-1">{rPlayers.length} players · {content.length} titles</p>
+        </div>
 
-        <div className="flex gap-1 bg-white/[.03] rounded-2xl p-1 mb-6 w-full border border-white/[.06]">
-          {[{id:'matches',l:'🤝 Matches'},{id:'ranked',l:'🏆 Top Picks'},{id:'individual',l:'👥 Everyone'}].map(t=>(
-            <button key={t.id} onClick={()=>setResultTab(t.id)} className={`flex-1 py-2.5 rounded-xl text-[11px] font-bold transition-all ${resultTab===t.id?'bg-gold/20 border border-gold/30 text-gold':'text-white/35 border border-transparent'}`}>{t.l}</button>
+        <div className="segmented max-w-[520px] mx-auto mb-7">
+          {[{ id: 'matches', l: 'Matches', Ic: IconHeart }, { id: 'ranked', l: 'Top Picks', Ic: IconTrophy }, { id: 'individual', l: 'Everyone', Ic: IconUsers }].map(t => (
+            <button key={t.id} data-active={resultTab === t.id} onClick={() => setResultTab(t.id)} className="flex items-center justify-center gap-1.5"><t.Ic size={14} />{t.l}</button>
           ))}
         </div>
 
-        {/* ── MATCHES ── */}
-        {resultTab==='matches'&&(<div className="w-full">
-          {matchItems.length>0 ? <div className="flex flex-col gap-2.5">
-            <p className="text-green-500 text-[13px] font-bold text-center mb-2">🎉 {matchItems.length} perfect match{matchItems.length>1?'es':''}!</p>
-            {matchItems.map((m,i)=>(
-              <div key={m.id} className="glass !p-0 overflow-hidden" style={{borderColor:'rgba(52,199,89,.2)',background:'linear-gradient(135deg,rgba(52,199,89,.06),rgba(52,199,89,.01))',animation:`slideUp .5s ease ${i*.08}s both`}}>
-                <div className="flex gap-3.5 p-3.5 items-center">
-                  <div className="relative shrink-0">
-                    <img src={m.poster} alt="" className="w-16 h-24 rounded-xl object-cover shadow-lg"/>
-                    <div className={`absolute top-1 left-1 rounded px-1 py-0.5 text-[7px] font-bold ${m.type==='series'?'type-badge-series':'type-badge-movie'}`}>{m.type==='series'?'📺':'🍿'}</div>
+        {/* MATCHES */}
+        {resultTab === 'matches' && (<div className="max-w-[720px] mx-auto">
+          {matchItems.length > 0 ? <>
+            <p className="text-success text-[13px] font-semibold text-center mb-4 flex items-center justify-center gap-1.5"><IconHeart size={15} filled />{matchItems.length} perfect match{matchItems.length > 1 ? 'es' : ''}!</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {matchItems.map((m, i) => (
+                <div key={m.id} className="card !p-0 overflow-hidden rise" style={{ borderColor: 'var(--success)', animationDelay: `${i * 0.06}s` }}>
+                  <div className="flex gap-3.5 p-3.5 items-center">
+                    <div className="relative shrink-0">
+                      <img src={m.poster} alt="" className="w-16 h-24 rounded-xl object-cover" />
+                      <span className={`badge absolute top-1 left-1 !h-auto !px-1 !py-0.5 ${m.type === 'series' ? 'badge-series' : 'badge-movie'}`}>{m.type === 'series' ? <IconTv size={9} /> : <IconFilm size={9} />}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-ink text-[15px] font-bold leading-tight">{m.title}</div>
+                      <div className="text-ink-2 text-xs mt-0.5">{m.year} · ★ {m.rating}{m.duration ? ` · ${m.duration}` : ''}</div>
+                      {m.type === 'series' && m.seasons > 0 && <div className="text-[10px] font-bold mt-0.5" style={{ color: 'var(--series)' }}>{m.seasons}S · {m.episodes || '?'}Ep {m.status === 'Returning Series' ? '· Ongoing' : m.status === 'Ended' ? '· Ended' : ''}</div>}
+                      <div className="flex gap-1 mt-1.5 flex-wrap">{(m.ott || []).map(o => <span key={o} className="ott" style={{ background: OTT_BG[o] || '#555' }}>{o}</span>)}</div>
+                    </div>
+                    <span className="badge badge-success !h-auto !py-2 !px-2.5 flex-col shrink-0"><IconHeart size={16} filled />ALL</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-white text-base font-extrabold leading-tight" style={{fontFamily:"'Playfair Display',serif"}}>{m.title}</div>
-                    <div className="text-white/40 text-xs mt-0.5">{m.year} · ★ {m.rating}{m.duration?` · ${m.duration}`:''}</div>
-                    {m.type==='series'&&m.seasons>0&&<div className="text-purple-400 text-[10px] font-bold mt-0.5">📺 {m.seasons}S · {m.episodes||'?'}Ep {m.status==='Returning Series'?'· 🟢 Ongoing':m.status==='Ended'?'· 🔴 Ended':''}</div>}
-                    <div className="flex gap-1 mt-1.5 flex-wrap">{(m.ott||[]).map(o=><span key={o} className="ott" style={{background:OTT_BG[o]||'#555'}}>{o}</span>)}</div>
-                  </div>
-                  <div className="bg-green-500/15 rounded-2xl px-3 py-2 text-green-500 text-[10px] font-extrabold text-center shrink-0"><div className="text-lg mb-0.5">💚</div>ALL</div>
                 </div>
-              </div>
-            ))}
-          </div> : <div className="glass text-center py-10 px-6" style={{borderColor:'rgba(212,168,67,.1)',background:'rgba(212,168,67,.02)'}}><span className="text-[44px]">😅</span><p className="text-white/50 text-[15px] mt-3.5">No perfect matches</p><p className="text-white/30 text-[13px] mt-1.5">Check "Top Picks"!</p></div>}
+              ))}
+            </div>
+          </> : <div className="card text-center py-12 px-6 max-w-[420px] mx-auto"><span className="tile tile-accent mx-auto mb-3 !w-12 !h-12"><IconHeart size={22} /></span><p className="text-ink text-[15px] font-medium">No perfect matches</p><p className="text-ink-3 text-[13px] mt-1.5">Check "Top Picks" for the crowd favorites.</p></div>}
         </div>)}
 
-        {/* ── RANKED ── */}
-        {resultTab==='ranked'&&(<div className="flex flex-col gap-2 w-full">
-          {(ranked||[]).slice(0,20).map((r,i)=>{
-            const item=content.find(c=>c.id===Number(r.contentId)); if(!item)return null;
-            const pct=(r.votes/rPlayers.length)*100;
-            const med=['🥇','🥈','🥉'];
-            return(<div key={r.contentId} className="glass !p-3 flex items-center gap-2.5" style={{animation:`slideUp .4s ease ${i*.05}s both`}}>
-              {i<3?<span className="text-xl w-8 text-center shrink-0">{med[i]}</span>:<div className="w-8 h-8 rounded-lg bg-white/[.04] flex items-center justify-center text-[13px] font-extrabold text-white/30 shrink-0">{i+1}</div>}
+        {/* RANKED */}
+        {resultTab === 'ranked' && (<div className="grid gap-2.5 sm:grid-cols-2 max-w-[760px] mx-auto">
+          {(ranked || []).slice(0, 20).map((r, i) => {
+            const item = content.find(c => c.id === Number(r.contentId)); if (!item) return null;
+            const pct = (r.votes / rPlayers.length) * 100;
+            return (<div key={r.contentId} className="card !p-3 flex items-center gap-2.5 rise" style={{ animationDelay: `${i * 0.04}s` }}>
+              <div className="w-8 text-center shrink-0">{i < 3 ? <IconTrophy size={20} /> : <span className="text-[13px] font-bold text-ink-3">{i + 1}</span>}</div>
               <div className="relative shrink-0">
-                <img src={item.poster} alt="" className="w-11 h-16 rounded-lg object-cover shadow"/>
-                <div className={`absolute top-0.5 left-0.5 rounded px-0.5 py-0 text-[6px] font-bold ${item.type==='series'?'type-badge-series':'type-badge-movie'}`}>{item.type==='series'?'📺':'🍿'}</div>
+                <img src={item.poster} alt="" className="w-11 h-16 rounded-lg object-cover" />
+                <span className={`badge absolute top-0.5 left-0.5 !h-auto !px-1 !py-0 ${item.type === 'series' ? 'badge-series' : 'badge-movie'}`}>{item.type === 'series' ? <IconTv size={8} /> : <IconFilm size={8} />}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-sm font-bold truncate">{item.title}</div>
-                <div className="text-white/30 text-[11px] mt-0.5">★ {item.rating} · {item.year}{item.type==='series'&&item.seasons>0?` · ${item.seasons}S`:''}{item.type==='movie'&&item.duration?` · ${item.duration}`:''}</div>
-                <div className="flex gap-1 mt-1">{(r.voterIds||[]).map(vid=>{const v=rPlayers.find(p=>p.id===vid);return v?<div key={vid} className="w-5 h-5 rounded-md flex items-center justify-center text-[9px]" style={{background:`${v.color}33`,border:`1px solid ${v.color}55`}}>{v.avatar}</div>:null;})}</div>
+                <div className="text-ink text-sm font-semibold truncate">{item.title}</div>
+                <div className="text-ink-3 text-[11px] mt-0.5">★ {item.rating} · {item.year}{item.type === 'series' && item.seasons > 0 ? ` · ${item.seasons}S` : ''}{item.type === 'movie' && item.duration ? ` · ${item.duration}` : ''}</div>
+                <div className="flex gap-1 mt-1.5">{(r.voterIds || []).map(vid => { const v = rPlayers.find(p => p.id === vid); return v ? <span key={vid} className="w-5 h-5 rounded-md grid place-items-center text-[9px]" style={{ background: `${v.color}33`, border: `1px solid ${v.color}55` }}>{v.avatar}</span> : null; })}</div>
               </div>
               <div className="text-right shrink-0">
-                <div className={`text-[15px] font-extrabold ${pct===100?'text-green-500':pct>=50?'text-gold':'text-white/30'}`}>{r.votes}/{rPlayers.length}</div>
-                <div className="w-12 h-1 bg-white/[.05] rounded mt-1 overflow-hidden"><div className="h-full rounded" style={{width:`${pct}%`,background:pct===100?'#34C759':pct>=50?'linear-gradient(90deg,#D4A843,#E8C76A)':'rgba(255,255,255,.15)'}}/></div>
+                <div className={`text-[15px] font-bold ${pct === 100 ? 'text-success' : pct >= 50 ? 'text-accent' : 'text-ink-3'}`}>{r.votes}/{rPlayers.length}</div>
+                <div className="w-12 h-1.5 rounded mt-1 overflow-hidden" style={{ background: 'var(--surface-2)' }}><div className="h-full rounded" style={{ width: `${pct}%`, background: pct === 100 ? 'var(--success)' : 'var(--accent)' }} /></div>
               </div>
             </div>);
           })}
         </div>)}
 
-        {/* ── INDIVIDUAL ── */}
-        {resultTab==='individual'&&(<div className="w-full">
-          {rPlayers.map((p,pi)=>{
-            const likes=((individual||{})[p.id]||[]).map(l=>content.find(c=>c.id===Number(l.id))).filter(Boolean);
-            return(<div key={p.id} className="mb-5" style={{animation:`slideUp .5s ease ${pi*.1}s both`}}>
-              <div className="flex items-center gap-2.5 mb-2.5"><div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{background:`${p.color}22`,border:`2px solid ${p.color}44`}}>{p.avatar}</div><span className="text-white text-[15px] font-bold">{p.name}</span><span className="text-white/20 text-xs">liked {likes.length}</span></div>
-              {likes.length>0
-                ? <div className="flex gap-2 overflow-x-auto pb-2" style={{scrollSnapType:'x mandatory'}}>{likes.map(m=>(
-                    <div key={m.id} className="shrink-0" style={{minWidth:100,scrollSnapAlign:'start'}}>
+        {/* INDIVIDUAL */}
+        {resultTab === 'individual' && (<div className="max-w-[820px] mx-auto">
+          {rPlayers.map((p, pi) => {
+            const likes = ((individual || {})[p.id] || []).map(l => content.find(c => c.id === Number(l.id))).filter(Boolean);
+            return (<div key={p.id} className="mb-6 rise" style={{ animationDelay: `${pi * 0.08}s` }}>
+              <div className="flex items-center gap-2.5 mb-3"><Avatar p={p} size={34} /><span className="text-ink text-[15px] font-semibold">{p.name}</span><span className="text-ink-3 text-xs">liked {likes.length}</span></div>
+              {likes.length > 0
+                ? <div className="flex gap-2.5 overflow-x-auto pb-2" style={{ scrollSnapType: 'x mandatory' }}>{likes.map(m => (
+                    <div key={m.id} className="shrink-0" style={{ width: 104, scrollSnapAlign: 'start' }}>
                       <div className="relative">
-                        <img src={m.poster} alt="" className="w-[100px] h-[148px] rounded-xl object-cover border border-white/[.08] shadow-lg"/>
-                        <div className={`absolute top-1 left-1 rounded px-1 py-0.5 text-[7px] font-bold ${m.type==='series'?'type-badge-series':'type-badge-movie'}`}>{m.type==='series'?'📺':'🍿'}</div>
+                        <img src={m.poster} alt="" className="w-[104px] h-[152px] rounded-xl object-cover border border-hair" />
+                        <span className={`badge absolute top-1 left-1 !h-auto !px-1 !py-0.5 ${m.type === 'series' ? 'badge-series' : 'badge-movie'}`}>{m.type === 'series' ? <IconTv size={9} /> : <IconFilm size={9} />}</span>
                       </div>
-                      <div className="text-white/60 text-[11px] font-semibold mt-1.5 truncate w-[100px]">{m.title}</div>
-                      <div className="text-white/30 text-[10px]">★ {m.rating}{m.type==='series'&&m.seasons>0?` · ${m.seasons}S`:''}</div>
+                      <div className="text-ink-2 text-[11px] font-semibold mt-1.5 truncate w-[104px]">{m.title}</div>
+                      <div className="text-ink-3 text-[10px]">★ {m.rating}{m.type === 'series' && m.seasons > 0 ? ` · ${m.seasons}S` : ''}</div>
                     </div>
                   ))}</div>
-                : <p className="text-white/15 text-xs italic pl-1">Didn't like anything</p>}
+                : <p className="text-ink-3 text-xs italic pl-1">Didn't like anything</p>}
             </div>);
           })}
         </div>)}
 
-        <div className="flex gap-2.5 mt-8 w-full" style={{animation:'slideUp .6s ease .6s both'}}>
-          <button onClick={()=>router.push('/')} className="btn-glass flex-1">New Room</button>
-          <button onClick={()=>window.location.reload()} className="btn-gold flex-1">Play Again ↻</button>
+        <div className="flex gap-2.5 mt-8 max-w-[420px] mx-auto">
+          <button onClick={() => router.push('/')} className="btn btn-secondary flex-1">New room</button>
+          <button onClick={() => window.location.reload()} className="btn btn-primary flex-1">Play again</button>
         </div>
       </div>
-      <Toast msg={toast.msg} visible={toast.v}/>
+      <Toast msg={toast.msg} visible={toast.v} />
     </>);
   }
 
-  // Fallback
-  return <><StarBG/><div className="relative z-10 min-h-screen flex items-center justify-center"><div className="spinner"/></div></>;
+  // ── RESULTS FAILED TO LOAD (no more dead-end spinner) ──
+  if (screen === 'results' && !resultData) return (<><CinematicBG variant="content" />
+    <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">
+      <div className="card p-8 max-w-[380px] w-full text-center rise">
+        <span className="tile tile-accent mx-auto mb-4 !w-12 !h-12"><IconTrophy size={22} /></span>
+        <h2 className="text-ink text-[19px] font-bold mb-1.5">Couldn't load results</h2>
+        <p className="text-ink-3 text-[13.5px] mb-5">The connection hiccuped. Give it another go.</p>
+        <button onClick={async () => { const d = await fetchResults(); if (!d) show('Still unreachable — try again'); }} className="btn btn-primary btn-block">Retry</button>
+      </div>
+    </div>
+  </>);
+
+  return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
 }

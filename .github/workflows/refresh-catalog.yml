@@ -1,0 +1,25 @@
+# Refreshes our own content catalog weekly — free on GitHub Actions.
+# Required repo secrets: TMDB_API_KEY, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+name: Refresh catalog
+
+on:
+  schedule:
+    - cron: '0 3 * * 1' # every Monday 03:00 UTC
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Seed catalog
+        run: node scripts/seed-catalog.mjs
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

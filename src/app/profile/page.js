@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import StarBG from '@/components/StarBG';
+import CinematicBG from '@/components/CinematicBG';
+import { IconChevronLeft, IconClock, IconHeart, IconHome, IconFilm, IconTv, IconUsers } from '@/components/Icons';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -14,94 +15,107 @@ export default function ProfilePage() {
 
   useEffect(() => {
     (async () => {
-      const { data:{user:u} } = await supabase.auth.getUser();
+      const { data: { user: u } } = await supabase.auth.getUser();
       if (!u) { router.push('/login'); return; }
       setUser(u);
-      const { data:p } = await supabase.from('profiles').select('*').eq('id',u.id).single();
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', u.id).single();
       setProfile(p);
-      const { data:h } = await supabase.from('watch_history').select('*').eq('user_id',u.id).order('created_at',{ascending:false}).limit(60);
-      setHistory(h||[]);
-      const { data:r } = await supabase.from('rooms').select('*').eq('host_id',u.id).order('created_at',{ascending:false}).limit(30);
-      setRooms(r||[]);
+      const { data: h } = await supabase.from('watch_history').select('*').eq('user_id', u.id).order('created_at', { ascending: false }).limit(60);
+      setHistory(h || []);
+      const { data: r } = await supabase.from('rooms').select('*').eq('host_id', u.id).order('created_at', { ascending: false }).limit(30);
+      setRooms(r || []);
     })();
   }, [router]);
 
-  if (!user) return <><StarBG/><div className="relative z-10 min-h-screen flex items-center justify-center"><div className="spinner"/></div></>;
-  const matches = history.filter(h=>h.was_match);
+  if (!user) return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
+  const matches = history.filter(h => h.was_match);
 
-  return (<><StarBG/>
-    <div className="relative z-10 min-h-screen flex flex-col items-center px-4 py-6 max-w-[480px] mx-auto">
-      <div className="w-full flex items-center justify-between mb-6">
-        <button onClick={()=>router.push('/')} className="text-white/40 text-xl">←</button>
-        <h2 className="text-lg font-bold" style={{fontFamily:"'Playfair Display',serif"}}>Profile</h2>
-        <button onClick={async()=>{await supabase.auth.signOut();router.push('/login');}} className="text-red-400/60 text-xs font-bold px-3 py-1.5 rounded-lg border border-red-400/20">Sign Out</button>
-      </div>
-
-      {/* Profile card */}
-      <div className="glass p-6 w-full mb-5 text-center" style={{animation:'slideUp .5s ease'}}>
-        {profile?.avatar_url
-          ? <img src={profile.avatar_url} alt="" className="w-16 h-16 rounded-2xl mx-auto mb-3 border-2 border-gold/30"/>
-          : <div className="w-16 h-16 rounded-2xl mx-auto mb-3 bg-gold/10 border-2 border-gold/30 flex items-center justify-center text-3xl">😎</div>}
-        <h3 className="text-xl font-extrabold" style={{fontFamily:"'Playfair Display',serif"}}>{profile?.full_name||'User'}</h3>
-        <p className="text-white/30 text-sm mt-1">{profile?.email}</p>
-        <div className="flex justify-center gap-6 mt-4">
-          <div className="text-center"><div className="text-gold text-xl font-black">{rooms.length}</div><div className="text-white/30 text-[11px] font-semibold">Rooms</div></div>
-          <div className="text-center"><div className="text-green-500 text-xl font-black">{matches.length}</div><div className="text-white/30 text-[11px] font-semibold">Matches</div></div>
-          <div className="text-center"><div className="text-purple-400 text-xl font-black">{history.length}</div><div className="text-white/30 text-[11px] font-semibold">Swiped</div></div>
+  return (<><CinematicBG variant="content" />
+    <div className="relative z-10 min-h-[100dvh]">
+      <header className="sticky top-0 z-20 nav-blur">
+        <div className="max-w-[760px] mx-auto px-5 h-16 flex items-center justify-between">
+          <button onClick={() => router.push('/')} className="btn btn-secondary btn-sm !w-auto !px-2.5" aria-label="Back"><IconChevronLeft size={18} /></button>
+          <h2 className="text-[16px] font-semibold text-ink">Profile</h2>
+          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="btn btn-danger btn-sm !w-auto">Sign out</button>
         </div>
-      </div>
+      </header>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-white/[.03] rounded-2xl p-1 mb-5 w-full border border-white/[.06]">
-        {[{id:'history',l:'🕐 History'},{id:'matches',l:'💚 Matches'},{id:'rooms',l:'🏠 Rooms'}].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} className={`flex-1 py-2.5 rounded-xl text-[12px] font-bold transition-all ${tab===t.id?'bg-gold/20 border border-gold/30 text-gold':'text-white/35 border border-transparent'}`}>{t.l}</button>
-        ))}
-      </div>
+      <main className="max-w-[760px] mx-auto px-5 pb-16 pt-2">
+        {/* Profile card */}
+        <div className="card p-6 text-center rise">
+          {profile?.avatar_url
+            ? <img src={profile.avatar_url} alt="" className="w-20 h-20 rounded-3xl mx-auto mb-3 object-cover" />
+            : <div className="w-20 h-20 rounded-3xl mx-auto mb-3 grid place-items-center text-accent" style={{ background: 'var(--accent-soft)' }}><IconUsers size={30} /></div>}
+          <h3 className="text-[22px] font-bold text-ink">{profile?.full_name || 'User'}</h3>
+          <p className="text-ink-3 text-sm mt-1">{profile?.email}</p>
+          <div className="flex justify-center gap-8 mt-5">
+            <div><div className="text-accent text-2xl font-bold">{rooms.length}</div><div className="text-ink-3 text-[11px] font-semibold">Rooms</div></div>
+            <div><div className="text-2xl font-bold" style={{ color: 'var(--success)' }}>{matches.length}</div><div className="text-ink-3 text-[11px] font-semibold">Matches</div></div>
+            <div><div className="text-2xl font-bold" style={{ color: 'var(--series)' }}>{history.length}</div><div className="text-ink-3 text-[11px] font-semibold">Swiped</div></div>
+          </div>
+        </div>
 
-      {/* Content */}
-      {tab==='history' && (history.length > 0
-        ? <div className="flex flex-wrap gap-2.5 w-full">{history.map((h,i)=>(
-            <div key={h.id} className="w-[calc(33.33%-7px)]" style={{animation:`slideUp .4s ease ${i*.03}s both`}}>
-              <div className="relative">
-                {h.poster_path && <img src={`https://image.tmdb.org/t/p/w200${h.poster_path}`} alt="" className="w-full aspect-[2/3] rounded-xl object-cover border border-white/[.06]"/>}
-                {h.was_match && <div className="absolute top-1 right-1 bg-green-500/80 rounded-md px-1.5 py-0.5 text-[8px] font-bold">MATCH</div>}
-                <div className={`absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[8px] font-bold ${h.content_type==='series'?'type-badge-series':'type-badge-movie'}`}>
-                  {h.content_type==='series'?'📺':'🍿'}
+        {/* Tabs */}
+        <div className="segmented my-5">
+          {[{ id: 'history', l: 'History', Ic: IconClock }, { id: 'matches', l: 'Matches', Ic: IconHeart }, { id: 'rooms', l: 'Rooms', Ic: IconHome }].map(t => (
+            <button key={t.id} data-active={tab === t.id} onClick={() => setTab(t.id)} className="flex items-center justify-center gap-1.5"><t.Ic size={14} />{t.l}</button>
+          ))}
+        </div>
+
+        {/* History */}
+        {tab === 'history' && (history.length > 0
+          ? <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">{history.map((h, i) => (
+              <div key={h.id} className="rise" style={{ animationDelay: `${i * 0.02}s` }}>
+                <div className="relative">
+                  {h.poster_path && <img src={`https://image.tmdb.org/t/p/w200${h.poster_path}`} alt="" className="w-full aspect-[2/3] rounded-xl object-cover border border-hair" />}
+                  {h.was_match && <span className="badge badge-success absolute top-1 right-1">MATCH</span>}
+                  <span className={`badge absolute bottom-1 left-1 ${h.content_type === 'series' ? 'badge-series' : 'badge-movie'}`}>{h.content_type === 'series' ? <IconTv size={10} /> : <IconFilm size={10} />}</span>
                 </div>
+                <p className="text-ink-2 text-[10px] font-medium mt-1.5 truncate">{h.title}</p>
               </div>
-              <p className="text-white/50 text-[10px] font-semibold mt-1.5 truncate">{h.title}</p>
-            </div>
-          ))}</div>
-        : <div className="glass text-center py-12 w-full"><span className="text-3xl">📭</span><p className="text-white/30 mt-3 text-sm">No history yet</p></div>
-      )}
+            ))}</div>
+          : <Empty Ic={IconClock} text="No history yet" />
+        )}
 
-      {tab==='matches' && (matches.length > 0
-        ? <div className="flex flex-wrap gap-2.5 w-full">{matches.map((h,i)=>(
-            <div key={h.id} className="w-[calc(33.33%-7px)]" style={{animation:`slideUp .4s ease ${i*.03}s both`}}>
-              {h.poster_path && <img src={`https://image.tmdb.org/t/p/w200${h.poster_path}`} alt="" className="w-full aspect-[2/3] rounded-xl object-cover border border-green-500/20"/>}
-              <p className="text-white/50 text-[10px] font-semibold mt-1.5 truncate">{h.title}</p>
-            </div>
-          ))}</div>
-        : <div className="glass text-center py-12 w-full"><span className="text-3xl">💚</span><p className="text-white/30 mt-3 text-sm">No matches yet</p></div>
-      )}
+        {/* Matches */}
+        {tab === 'matches' && (matches.length > 0
+          ? <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">{matches.map((h, i) => (
+              <div key={h.id} className="rise" style={{ animationDelay: `${i * 0.02}s` }}>
+                {h.poster_path && <img src={`https://image.tmdb.org/t/p/w200${h.poster_path}`} alt="" className="w-full aspect-[2/3] rounded-xl object-cover" style={{ border: '1px solid var(--success)' }} />}
+                <p className="text-ink-2 text-[10px] font-medium mt-1.5 truncate">{h.title}</p>
+              </div>
+            ))}</div>
+          : <Empty Ic={IconHeart} text="No matches yet" />
+        )}
 
-      {tab==='rooms' && (rooms.length > 0
-        ? <div className="flex flex-col gap-2.5 w-full">{rooms.map((r,i)=>(
-            <div key={r.id} className="glass !p-4 flex items-center justify-between" style={{animation:`slideUp .4s ease ${i*.05}s both`}}>
-              <div>
-                <span className="text-gold font-black tracking-[2px] text-sm" style={{fontFamily:"'Bebas Neue'"}}>{r.code}</span>
-                <div className="flex gap-2 mt-0.5">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${r.content_type==='series'?'type-badge-series':r.content_type==='movies'?'type-badge-movie':'bg-white/5 text-white/30 border border-white/10'}`}>
-                    {r.content_type==='series'?'📺 Series':r.content_type==='movies'?'🍿 Movies':'🎬 Both'}
-                  </span>
-                  <span className="text-white/20 text-[10px]">{new Date(r.created_at).toLocaleDateString()}</span>
+        {/* Rooms */}
+        {tab === 'rooms' && (rooms.length > 0
+          ? <div className="grid gap-2.5 sm:grid-cols-2">{rooms.map((r, i) => (
+              <div key={r.id} className="card !p-4 flex items-center justify-between rise" style={{ animationDelay: `${i * 0.04}s` }}>
+                <div>
+                  <span className="wordmark text-accent tracking-[2px] text-[15px]">{r.code}</span>
+                  <div className="flex gap-2 mt-1 items-center">
+                    <span className={`badge ${r.content_type === 'series' ? 'badge-series' : 'badge-movie'}`}>
+                      {r.content_type === 'series' ? <><IconTv size={10} />Series</> : r.content_type === 'movies' ? <><IconFilm size={10} />Movies</> : <><IconFilm size={10} />Both</>}
+                    </span>
+                    <span className="text-ink-3 text-[10px]">{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
                 </div>
+                <span className={`badge ${r.status === 'results' ? 'badge-success' : 'badge-movie'}`}>{r.status}</span>
               </div>
-              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${r.status==='results'?'bg-green-500/15 text-green-500':'bg-gold/15 text-gold'}`}>{r.status}</span>
-            </div>
-          ))}</div>
-        : <div className="glass text-center py-12 w-full"><span className="text-3xl">🏠</span><p className="text-white/30 mt-3 text-sm">No rooms yet</p></div>
-      )}
+            ))}</div>
+          : <Empty Ic={IconHome} text="No rooms yet" />
+        )}
+      </main>
     </div>
   </>);
+}
+
+function Empty({ Ic, text }) {
+  return (
+    <div className="card text-center py-14">
+      <span className="tile tile-accent mx-auto mb-3 !w-12 !h-12"><Ic size={22} /></span>
+      <p className="text-ink-3 text-sm">{text}</p>
+    </div>
+  );
 }

@@ -1,123 +1,171 @@
 'use client';
+// Marketing landing (industry-standard split): this page sells the product;
+// "Get started" launches the actual app at /app. Signed-in visitors go
+// straight to their dashboard.
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import StarBG from '@/components/StarBG';
-import Toast from '@/components/Toast';
+import Dashboard from '@/components/Dashboard';
+import PosterWall from '@/components/PosterWall';
+import Modal from '@/components/Modal';
+import TrendingStrip from '@/components/TrendingStrip';
+import { getTrending } from '@/lib/trending';
+import { IconBrand, BrandLogo, IconFilm, IconTv, IconTicket, IconPlay, IconStar, IconHeart, IconSparkles, IconUsers, IconTrophy, IconArrowRight, IconGoogle } from '@/components/Icons';
+
+// iCloud-style cluster: dark circular badges with colored glyphs, hugging the
+// center circle — some slightly overlapping its ring (z above/below center).
+// a = angle from 12 o'clock cw · rf = ring distance · sf = badge size (× width)
+// Delays start ~1.95s — AFTER the standalone-logo moment (see centerSeq).
+const SATS = [
+  { a: '-48deg',  rf: 0.29, sf: 0.215, z: 3, d: 1.95, fdur: 5.6, glyph: '#ff6a75', Ic: IconFilm },
+  { a: '112deg',  rf: 0.28, sf: 0.19,  z: 4, d: 2.06, fdur: 6.2, glyph: '#ffd66b', Ic: IconStar, filled: true },
+  { a: '-118deg', rf: 0.26, sf: 0.2,   z: 4, d: 2.17, fdur: 5.1, glyph: '#ff8fbf', Ic: IconHeart, filled: true },
+  { a: '12deg',   rf: 0.31, sf: 0.145, z: 2, d: 2.28, fdur: 4.7, glyph: '#5de0e6', Ic: IconSparkles },
+  { a: '58deg',   rf: 0.27, sf: 0.155, z: 2, d: 2.39, fdur: 5.9, glyph: '#4aa3ff', Ic: IconTv },
+  { a: '-84deg',  rf: 0.33, sf: 0.125, z: 2, d: 2.5,  fdur: 4.4, glyph: '#4be08b', Ic: IconPlay, filled: true },
+  { a: '171deg',  rf: 0.25, sf: 0.165, z: 6, d: 2.61, fdur: 5.3, glyph: '#c98bff', Ic: IconTicket },
+];
+
+const FEATURES = [
+  { Ic: IconUsers, glyph: '#4aa3ff', title: 'Host a room', desc: 'Create a room, share one link — friends join from any device in seconds.' },
+  { Ic: IconHeart, glyph: '#ff8fbf', title: 'Swipe together', desc: 'Everyone swipes the same deck of trending movies and series.' },
+  { Ic: IconTrophy, glyph: '#ffd66b', title: 'Match instantly', desc: 'The moment everyone agrees, you have your pick. No more debates.' },
+];
 
 export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [hostName, setHostName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
-  const [joinName, setJoinName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [toast, setToast] = useState({msg:'',v:false});
-  const show = m => { setToast({msg:m,v:true}); setTimeout(()=>setToast(t=>({...t,v:false})),2500); };
+  const [previewDash, setPreviewDash] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
+  const [trend, setTrend] = useState({ state: 'loading', items: [], posters: [] });
 
-  useEffect(()=>{
-    (async()=>{
-      const {data:{user:u}} = await supabase.auth.getUser();
+  const loadTrending = async (force = false) => {
+    setTrend(t => ({ ...t, state: 'loading' }));
+    try {
+      const d = await getTrending(force);
+      setTrend({ state: d.items.length ? 'ready' : 'empty', items: d.items, posters: d.posters });
+    } catch {
+      setTrend(t => ({ ...t, state: 'error' }));
+    }
+  };
+
+  useEffect(() => {
+    setPreviewDash(new URLSearchParams(window.location.search).get('view') === 'dashboard');
+    (async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
       if (u) {
         setUser(u);
-        const {data:p} = await supabase.from('profiles').select('*').eq('id',u.id).single();
+        const { data: p } = await supabase.from('profiles').select('*').eq('id', u.id).single();
         setProfile(p);
-        setHostName(p?.full_name||'');
-        setJoinName(p?.full_name||'');
       }
-      setReady(true);
     })();
-    const {data:{subscription}} = supabase.auth.onAuthStateChange((_,s) => {
-      setUser(s?.user||null);
-      if (s?.user) supabase.from('profiles').select('*').eq('id',s.user.id).single().then(({data})=>{
-        setProfile(data); setHostName(data?.full_name||''); setJoinName(data?.full_name||'');
-      });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
+      setUser(s?.user || null);
+      if (s?.user) supabase.from('profiles').select('*').eq('id', s.user.id).single().then(({ data }) => setProfile(data));
     });
+    // Trending titles + poster backdrop (single fetch, session-cached)
+    loadTrending();
     return () => subscription.unsubscribe();
-  },[]);
+  }, []);
 
-  const create = async () => {
-    if(!hostName.trim()){show('Enter your name');return;}
-    setLoading(true);
-    localStorage.removeItem('fp_room_code'); // clear any previous room session
-    try {
-      const r = await fetch('/api/create-room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hostName:hostName.trim(),userId:user?.id||null})});
-      const d = await r.json(); if(d.error) throw new Error(d.error);
-      localStorage.setItem('fp_session',d.sessionToken); localStorage.setItem('fp_host','true'); localStorage.setItem('fp_room_code',d.room.code);
-      router.push(`/room/${d.room.code}`);
-    } catch(e){show(e.message);}
-    setLoading(false);
+  // Get started opens an explicit choice — never auto-routes into guest mode
+  const openStart = () => setStartOpen(true);
+  const continueAsGuest = () => {
+    localStorage.setItem('fp_guest', '1');
+    router.push('/app');
   };
+  const scrollToFeatures = () => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
 
-  const join = async () => {
-    if(joinCode.length<4){show('Enter a valid code');return;}
-    if(!joinName.trim()){show('Enter your name');return;}
-    setLoading(true);
-    try {
-      const r = await fetch('/api/join-room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:joinCode.trim(),playerName:joinName.trim(),userId:user?.id||null})});
-      const d = await r.json(); if(d.error) throw new Error(d.error);
-      localStorage.setItem('fp_session',d.sessionToken); localStorage.setItem('fp_host','false'); localStorage.setItem('fp_room_code',d.room.code);
-      router.push(`/room/${d.room.code}`);
-    } catch(e){show(e.message);}
-    setLoading(false);
-  };
+  // Signed-in → straight to the working app
+  if (user || previewDash) return <Dashboard profile={profile} userId={user?.id} />;
 
-  const googleLogin = async () => {
-    await supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:`${window.location.origin}/`}});
-  };
-
-  if(!ready) return <><StarBG/><div className="relative z-10 min-h-screen flex items-center justify-center"><div className="spinner"/></div></>;
-
-  return (<><StarBG/>
-    <div className="relative z-10 min-h-screen flex flex-col items-center px-4 py-6 max-w-[480px] mx-auto">
-      {/* Top bar */}
-      <div className="w-full flex justify-end mb-2" style={{animation:'fadeIn .5s ease'}}>
-        {user
-          ? <button onClick={()=>router.push('/profile')} className="flex items-center gap-2 glass !rounded-full !p-1.5 !pr-4 cursor-pointer hover:bg-white/[.06] transition">
-              {profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full border border-gold/30"/> : <div className="w-8 h-8 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center text-sm">😎</div>}
-              <span className="text-white/70 text-[13px] font-semibold">{profile?.full_name?.split(' ')[0]||'Profile'}</span>
-            </button>
-          : <button onClick={googleLogin} className="glass !rounded-full !px-4 !py-2 text-gold text-[12px] font-bold cursor-pointer hover:bg-white/[.06] transition">Sign In</button>
-        }
+  // Signed-out → marketing landing
+  return (
+    <div className="landing">
+      {/* Movie frames behind the hero, revealed as the cluster forms */}
+      <div className="landing-cinema">
+        <PosterWall posters={trend.posters} />
+        <div className="landing-scrim" />
       </div>
 
-      {/* Hero */}
-      <div className="text-center mt-[3vh]" style={{animation:'slideUp .8s ease'}}>
-        <div className="text-[52px] mb-3" style={{animation:'float 4s ease-in-out infinite',filter:'drop-shadow(0 0 30px rgba(212,168,67,.3))'}}>🎬</div>
-        <h1 className="text-[40px] font-black leading-none mb-2" style={{fontFamily:"'Playfair Display',serif",background:'linear-gradient(135deg,#fff 0%,#D4A843 50%,#E8C76A 100%)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>FlickPick</h1>
-        <p className="text-white/35 text-[15px]">Swipe. Match. Watch together.</p>
-        <p className="text-white/20 text-[11px] mt-1">Movies • Web Series • Both — Powered by TMDB</p>
-      </div>
+      <header className="nav-land">
+        <div className="max-w-content mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <IconBrand size={24} />
+            <span className="text-[17px] font-semibold text-white tracking-tight">FlickPick</span>
+          </div>
+          <button onClick={() => router.push('/login')} className="text-white/70 hover:text-white text-[14px] font-medium transition px-2 py-2">Sign in</button>
+        </div>
+      </header>
 
-      {/* Create */}
-      <div className="glass p-6 w-full mt-8" style={{animation:'slideUp .7s ease .1s both'}}>
-        <div className="flex items-center gap-2.5 mb-4"><span className="text-xl">🎬</span><h3 className="text-[17px] font-extrabold" style={{fontFamily:"'Playfair Display',serif"}}>Host a Room</h3></div>
-        <label className="text-white/35 text-[11px] font-bold tracking-[1.5px] uppercase mb-2 block">Your name</label>
-        <input value={hostName} onChange={e=>setHostName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&create()} placeholder="Enter your name" className="inp mb-4"/>
-        <button onClick={create} disabled={loading} className="btn-gold">{loading?'Creating...':'Create Room ✦'}</button>
-      </div>
+      {/* ── Hero: logo first, then the cluster pops in ── */}
+      <section className="relative z-10 min-h-[calc(100dvh-56px)] flex flex-col items-center justify-center px-6 text-center">
+        <div className="hero-cluster">
+          {SATS.map((s, i) => (
+            <div
+              key={i}
+              className="sat"
+              style={{ '--a': s.a, '--rf': s.rf, '--ts': `calc(var(--w) * ${s.sf})`, '--z': s.z, '--d': `${s.d}s`, '--fdur': `${s.fdur}s`, '--fd': `${s.d + 0.64}s` }}
+            >
+              <div className="sat-pop">
+                <div className="sat-float">
+                  <div className="app-tile" style={{ '--glyph': s.glyph }}><s.Ic filled={s.filled} /></div>
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="hero-center"><IconPlay filled /></div>
+        </div>
 
-      <div className="flex items-center gap-4 my-4 w-full" style={{animation:'fadeIn .7s ease .3s both'}}><div className="flex-1 h-px bg-white/[.06]"/><span className="text-white/15 text-xs font-semibold">OR</span><div className="flex-1 h-px bg-white/[.06]"/></div>
+        <h1 className="hero-title mt-9 rise" style={{ animationDelay: '.38s' }}>FlickPick</h1>
+        <button onClick={openStart} className="pill-white mt-7 rise" style={{ animationDelay: '.55s' }}>Get started</button>
+        <p className="hero-sub mt-9 max-w-[660px] rise" style={{ animationDelay: '.72s' }}>Watch together. Pick together.</p>
 
-      {/* Join */}
-      <div className="glass p-6 w-full" style={{animation:'slideUp .7s ease .3s both'}}>
-        <div className="flex items-center gap-2.5 mb-4"><span className="text-xl">🎟️</span><h3 className="text-[17px] font-extrabold" style={{fontFamily:"'Playfair Display',serif"}}>Join a Room</h3></div>
-        <label className="text-white/35 text-[11px] font-bold tracking-[1.5px] uppercase mb-2 block">Room code</label>
-        <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} placeholder="ABC123" maxLength={6} className="inp mb-3 text-center text-xl font-bold tracking-[6px] uppercase" style={{fontFamily:"'Bebas Neue'"}}/>
-        <label className="text-white/35 text-[11px] font-bold tracking-[1.5px] uppercase mb-2 block">Your name</label>
-        <input value={joinName} onChange={e=>setJoinName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&join()} placeholder="Enter your name" className="inp mb-4"/>
-        <button onClick={join} disabled={loading} className="btn-glass">{loading?'Joining...':'Join Room →'}</button>
-      </div>
+        <button onClick={scrollToFeatures} aria-label="Scroll down" className="mt-14 text-white/30 hover:text-white/60 transition fade" style={{ animationDelay: '3.2s' }}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10l5 5 5-5" /></svg>
+        </button>
+      </section>
 
-      {!user && <button onClick={googleLogin} className="glass !p-4 w-full mt-4 flex items-center justify-center gap-3 cursor-pointer hover:bg-white/[.06] transition" style={{animation:'slideUp .7s ease .5s both'}}>
-        <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-        <span className="text-white/50 text-[13px] font-semibold">Sign in with Google to save your history</span>
-      </button>}
+      {/* ── How it works ── */}
+      <section id="features" className="relative z-10 max-w-content mx-auto px-6 py-16 sm:py-24">
+        <div className="text-center mb-10">
+          <div className="flex justify-center mb-5"><BrandLogo height={72} /></div>
+          <h2 className="text-white text-[30px] sm:text-[40px] font-bold tracking-tight">Movie night, decided.</h2>
+          <p className="text-white/50 text-[15px] sm:text-[17px] mt-2">One room, 2–12 friends, one perfect match.</p>
+        </div>
 
-      <p className="text-white/10 text-[11px] mt-6 text-center pb-4" style={{animation:'fadeIn 1s ease .6s both'}}>2–12 friends · Live TMDB data · 100% free</p>
+        <div className="grid gap-4 sm:grid-cols-3 max-w-[900px] mx-auto">
+          {FEATURES.map((f, i) => (
+            <div key={i} className="glass-dark p-6 text-center">
+              <span className="app-tile mx-auto mb-4" style={{ '--glyph': f.glyph, '--ts': '56px' }}><f.Ic size={26} /></span>
+              <h3 className="text-white text-[17px] font-semibold">{f.title}</h3>
+              <p className="text-white/50 text-[13.5px] mt-1.5 leading-relaxed">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-white/30 text-[12px] mt-10 text-center">Movies & series · 2–12 friends · No downloads</p>
+      </section>
+
+      {/* ── Trending this week ── */}
+      <TrendingStrip state={trend.state} items={trend.items} onRetry={() => loadTrending(true)} />
+
+      {/* ── Get started: explicit choice, never auto-guest ── */}
+      <Modal open={startOpen} onClose={() => setStartOpen(false)} label="Get started">
+        <div className="text-center mb-5">
+          <div className="flex justify-center mb-3"><IconBrand size={40} /></div>
+          <h3 className="text-white text-[19px] font-semibold">How do you want to start?</h3>
+          <p className="text-white/50 text-[13px] mt-1">Sign in to keep your history — or jump straight in.</p>
+        </div>
+        <button onClick={() => router.push('/login')} className="btn btn-primary btn-block btn-lg mb-2.5">
+          <IconGoogle size={17} /> Sign in / Create account
+        </button>
+        <button onClick={continueAsGuest} className="btn btn-block btn-lg" style={{ background: 'rgba(255,255,255,.12)', color: '#fff' }}>
+          Continue as guest <IconArrowRight size={17} />
+        </button>
+        <button onClick={() => setStartOpen(false)} className="btn btn-ghost btn-sm btn-block mt-2">Cancel</button>
+      </Modal>
     </div>
-    <Toast msg={toast.msg} visible={toast.v}/>
-  </>);
+  );
 }

@@ -169,7 +169,10 @@ git push -u origin main
 |----------|-------|
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://abc123.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJ...` (your anon key) |
-| `TMDB_API_KEY` | Your TMDB v3 API key |
+
+> **Note:** `TMDB_API_KEY` is NOT needed on Vercel anymore — the app serves
+> content from your own Supabase catalog. The key is only used by the
+> one-time seed script / weekly refresh job (see "Own Content Catalog").
 
 6. Click **Deploy** → wait 1-2 min
 
@@ -199,7 +202,17 @@ Open your Vercel URL and test:
 
 ---
 
-## 💰 Cost: $0/month
+## 💳 Monetization-ready
+
+The product makes no "free forever" promises, and every limit lives in one
+file: `src/lib/plans.js` (max players, deck sizes, history retention). The
+`profiles.plan` column ('free' by default) is already in the schema — adding
+a paid tier later means integrating billing (e.g. Stripe/Razorpay) that sets
+`plan = 'plus'`, and adjusting the numbers in `plans.js`. No refactor needed.
+
+---
+
+## 💰 Infra cost: $0/month
 
 | Service | Free Tier |
 |---------|-----------|
@@ -210,12 +223,81 @@ Open your Vercel URL and test:
 
 ---
 
+## 🎞️ Own Content Catalog (no runtime TMDB)
+
+FlickPick serves decks from **its own catalog** in Supabase — categories like
+Latest Releases, Blockbuster Hits, Most Watched, Top Rated, Hidden Gems are
+computed by us, and **Hot on FlickPick** is ranked by real player swipes.
+
+**Seed it once** (after running `supabase-schema.sql`):
+
+```bash
+TMDB_API_KEY=your_tmdb_key \
+NEXT_PUBLIC_SUPABASE_URL=https://abc123.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
+node scripts/seed-catalog.mjs
+```
+
+*(The service-role key is in Supabase → Settings → API. Keep it secret — it's
+only used here and in CI, never in the app.)*
+
+**Keep it fresh for free** — add these as GitHub repo secrets
+(`Settings → Secrets → Actions`): `TMDB_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. The included
+workflow (`.github/workflows/refresh-catalog.yml`) re-seeds every Monday and
+can be run manually from the Actions tab.
+
+---
+
+## ⏰ Never Let Supabase Pause (free tier)
+
+Supabase pauses free projects after ~7 days without activity. FlickPick
+ships **two free keep-alive pingers** so that never happens:
+
+1. **Vercel Cron** (`vercel.json`) — hits `/api/keepalive` daily, which runs
+   a 1-row query against the database. Enabled automatically on deploy.
+2. **GitHub Actions backup** (`.github/workflows/keepalive.yml`) — pings the
+   Supabase REST API directly every 3 days, so the DB stays awake even if
+   the Vercel deployment is broken. Uses the same repo secrets as above.
+
+No extra accounts, no cost — the database stays active permanently.
+
+---
+
 ## 🔧 Local Development
 
 ```bash
 npm install
-cp .env .env.local   # fill in your keys
+# create .env.local with:
+#   NEXT_PUBLIC_SUPABASE_URL=...
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 npm run dev                         # http://localhost:3000
+```
+
+---
+
+## 🧪 Testing
+
+Four layers, all free, all CI-ready (`.github/workflows/ci.yml` runs them on
+every push — no secrets needed):
+
+| Command | What it runs | Needs |
+|---|---|---|
+| `npm test` | **Unit + integration**: utilities, components (SwipeCard, Toast, PosterWall), and every API route against a mocked Supabase client — room creation, joining, swiping, results math, deck building, recommendation ranking, validation, and error paths | nothing |
+| `npm run test:watch` | same, in watch mode | nothing |
+| `npm run test:db` | **Real-database schema tests** via Testcontainers: boots a throwaway Postgres, applies `supabase-schema.sql`, verifies constraints, cascades, triggers, defaults, idempotent re-runs, and the legacy id migration | Docker (auto-skips without it) |
+| `npm run test:e2e` | **End-to-end journeys** with Playwright on desktop *and* iPhone viewports: full host flow (create → configure deck → swipe → results), loading states, failure states (empty catalog, results retry, progress restore after refresh), responsive overflow checks. All network stubbed — deterministic, no secrets | `npx playwright install chromium` (one-time) |
+| `npm run test:all` | everything above | Docker + Playwright browser |
+
+Test layout:
+
+```
+tests/
+├── unit/               # pure logic + component behavior (jsdom)
+├── integration/api/    # route handlers with a chainable Supabase mock
+├── db/                 # Testcontainers: schema vs real Postgres
+├── e2e/                # Playwright journeys (desktop + mobile projects)
+└── helpers/            # supabaseMock — records every query chain
 ```
 
 ---
