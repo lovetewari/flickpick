@@ -72,6 +72,13 @@ export function ottBg(name) {
   return OTT_BG_ALL[name] || 'linear-gradient(135deg,#3a3a44,#22222a)';
 }
 
+// A provider logo is only "real" if it comes from TMDB's image CDN — anything
+// else (junk in the catalog, injected values) is rejected so the UI falls
+// back to the branded glyph instead of rendering an untrusted URL.
+export function isValidLogoUrl(u) {
+  return typeof u === 'string' && /^https:\/\/image\.tmdb\.org\/t\/p\/w\d+\/[\w.-]+\.(jpg|jpeg|png|webp)$/i.test(u);
+}
+
 // ═══ Genres ═══
 export const GENRES = ['All','Action','Comedy','Drama','Sci-Fi','Horror','Animation','Romance','Thriller','History','Fantasy','Mystery','Adventure','Crime','Documentary'];
 

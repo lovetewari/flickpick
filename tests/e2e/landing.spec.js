@@ -59,6 +59,20 @@ test.describe('landing page', () => {
     await expect(page.getByRole('button', { name: /Host a room/ })).toBeVisible();
   });
 
+  test('platform row shows validated real logos, IMAX mark, and legal credits', async ({ page }) => {
+    await page.unroute('**/api/providers');
+    await page.route('**/api/providers', r => r.fulfill({ json: { providers: [
+      { name: 'Netflix', logo: 'https://image.tmdb.org/t/p/w92/nf.jpg' },
+      { name: 'Prime Video', logo: 'https://image.tmdb.org/t/p/w92/pv.jpg' },
+    ] } }));
+    await page.goto('/');
+    await expect(page.getByAltText('Netflix')).toBeVisible();
+    await expect(page.getByAltText('Prime Video')).toBeVisible();
+    await expect(page.getByText('IMAX', { exact: true })).toBeVisible();
+    await expect(page.getByText(/courtesy of/)).toBeVisible();        // JustWatch/TMDB credit
+    await expect(page.getByText(/not endorsed or certified by TMDB/)).toBeVisible();
+  });
+
   test('features section explains the product', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Movie night, decided.' })).toBeVisible();
     await expect(page.getByText('Swipe together', { exact: true })).toBeVisible();

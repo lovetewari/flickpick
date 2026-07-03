@@ -5,7 +5,7 @@
 // Source order: OUR catalog (keyless, providers pre-seeded) → live TMDB
 // trending + watch-providers (needs TMDB_API_KEY) → keyless iTunes charts.
 import { createClient } from '@supabase/supabase-js';
-import { normProvider } from '@/lib/constants';
+import { normProvider, isValidLogoUrl } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +41,8 @@ function collectProviders(flatrate = []) {
   const seen = new Map();
   for (const p of flatrate) {
     const name = normProvider(p.provider_name);
-    if (name && !seen.has(name)) seen.set(name, p.logo_path ? `${LOGO}${p.logo_path}` : null);
+    const url = p.logo_path && String(p.logo_path).startsWith('/') ? `${LOGO}${p.logo_path}` : null;
+    if (name && !seen.has(name)) seen.set(name, isValidLogoUrl(url) ? url : null);
   }
   const names = [...seen.keys()].slice(0, 3);
   return { providers: names, providerLogos: names.map(n => seen.get(n)) };
@@ -77,7 +78,8 @@ async function fromCatalog() {
     const seen = new Map();
     (r.providers || []).forEach((name, i) => {
       const n = normProvider(name);
-      if (n && !seen.has(n)) seen.set(n, (r.provider_logos || [])[i] || null);
+      const logo = (r.provider_logos || [])[i];
+      if (n && !seen.has(n)) seen.set(n, isValidLogoUrl(logo) ? logo : null); // reject junk urls
     });
     const providers = [...seen.keys()].slice(0, 3);
     return {
@@ -97,7 +99,7 @@ async function fromTmdb() {
   if (!key) return [];
   const base = 'https://api.themoviedb.org/3';
   const tget = path => fetch(`${base}${path}${path.includes('?') ? '&' : '?'}api_key=${key}&language=en-US`,
-    { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({}));
+    { signal: AbortSignal.timeout(4000), next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({}));
 
   const [m, t] = await Promise.all([tget('/trending/movie/week'), tget('/trending/tv/week')]);
   const map = (arr, type) => (arr || [])
@@ -130,7 +132,7 @@ async function fromItunes() {
     ['https://itunes.apple.com/us/rss/toptvseasons/limit=25/json', 'series'],
   ];
   const [m, t] = await Promise.all(feeds.map(([u]) =>
-    fetch(u, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => null)
+    fetch(u, { signal: AbortSignal.timeout(5000), next: { revalidate: 3600 } }).then(r => r.json()).catch(() => null)
   ));
   const map = (feed, type) => (feed?.feed?.entry || []).map(e => {
     const art = e['im:image']?.[2]?.label || '';

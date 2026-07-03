@@ -4,10 +4,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import TrendingStrip from '@/components/TrendingStrip';
 
 const items = [
-  { id: 1, title: 'Streamer', poster: 'x.jpg', year: 2024, type: 'movie', rating: 8, providers: ['Netflix'], providerLogos: ['https://img/nf.jpg'], inTheaters: false },
-  { id: 2, title: 'Multi', poster: 'y.jpg', year: 2024, type: 'series', rating: 7, providers: ['Prime Video', 'Hotstar'], providerLogos: [null, null], inTheaters: false },
-  { id: 3, title: 'Cinema', poster: 'z.jpg', year: 2026, type: 'movie', rating: 0, providers: [], providerLogos: [], inTheaters: true },
-  { id: 4, title: 'Unknown', poster: 'w.jpg', year: 2020, type: 'series', rating: 6, providers: [], providerLogos: [], inTheaters: false },
+  { id: 1, title: 'Streamer', poster: 'https://img/x.jpg', year: 2024, type: 'movie', rating: 8, providers: ['Netflix'], providerLogos: ['https://img/nf.jpg'], inTheaters: false },
+  { id: 2, title: 'Multi', poster: 'https://img/y.jpg', year: 2024, type: 'series', rating: 7, providers: ['Prime Video', 'Hotstar'], providerLogos: [null, null], inTheaters: false },
+  { id: 3, title: 'Cinema', poster: 'https://img/z.jpg', year: 2026, type: 'movie', rating: 0, providers: [], providerLogos: [], inTheaters: true },
+  { id: 4, title: 'Unknown', poster: 'https://img/w.jpg', year: 2020, type: 'series', rating: 6, providers: [], providerLogos: [], inTheaters: false },
 ];
 
 describe('TrendingStrip availability tags', () => {
@@ -26,6 +26,15 @@ describe('TrendingStrip availability tags', () => {
   it('renders the empty state', () => {
     render(<TrendingStrip state="empty" items={[]} onRetry={() => {}} />);
     expect(screen.getByText('Trending list is warming up')).toBeInTheDocument();
+  });
+
+  it('falls back to the branded glyph when a real logo fails to load (validation)', () => {
+    render(<TrendingStrip state="ready" items={[items[0]]} onRetry={() => {}} />);
+    const logo = screen.getByAltText('Netflix');
+    expect(logo.tagName).toBe('IMG');
+    fireEvent.error(logo); // CDN 404 / blocked network
+    expect(screen.queryByAltText('Netflix')).toBeNull();                       // broken img gone
+    expect(screen.getByRole('img', { name: 'Netflix' })).toBeInTheDocument();  // glyph took its place
   });
 
   it('renders REAL provider logos when available, glyph fallback otherwise, "In Theaters", type fallback', () => {

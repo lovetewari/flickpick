@@ -117,6 +117,55 @@ async function buildDeck(type, count, { category, genre, platforms, hot }) {
   return picked.slice(0, count);
 }
 
+// ── Live TMDB fallback deck ──
+// Keeps rooms playable before the catalog is seeded (or if the DB is down).
+// No provider data at this tier — platform filters are skipped, everything
+// else (category, genre, counts) is honored.
+const TMDB_GENRE = {
+  28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy', 80: 'Crime',
+  99: 'Documentary', 18: 'Drama', 10751: 'Family', 14: 'Fantasy', 36: 'History',
+  27: 'Horror', 10402: 'Music', 9648: 'Mystery', 10749: 'Romance', 878: 'Sci-Fi',
+  53: 'Thriller', 10752: 'War', 37: 'Western',
+  10759: 'Action', 10762: 'Kids', 10765: 'Sci-Fi', 10768: 'War',
+};
+const TMDB_CAT = {
+  movie: { hot: '/trending/movie/week', hits: '/movie/popular', most_watched: '/movie/popular', latest: '/movie/now_playing', top_rated: '/movie/top_rated', hidden_gems: '/movie/top_rated' },
+  series: { hot: '/trending/tv/week', hits: '/tv/popular', most_watched: '/tv/popular', latest: '/tv/on_the_air', top_rated: '/tv/top_rated', hidden_gems: '/tv/top_rated' },
+};
+
+async function tmdbFallbackDeck(type, count, { category, genre }) {
+  const key = process.env.TMDB_API_KEY;
+  if (!key) return [];
+  const base = 'https://api.themoviedb.org/3';
+  const ep = TMDB_CAT[type][category] || TMDB_CAT[type].hits;
+  const get = page =>
+    fetch(`${base}${ep}?api_key=${key}&language=en-US&page=${page}`, {
+      signal: AbortSignal.timeout(5000), next: { revalidate: 1800 },
+    }).then(r => r.json()).catch(() => ({}));
+  const [p1, p2] = await Promise.all([get(1), get(2)]);
+  const offset = type === 'series' ? SERIES_OFFSET : 0;
+  let rows = [...(p1.results || []), ...(p2.results || [])]
+    .filter(x => x.poster_path && (x.title || x.name))
+    .map(x => ({
+      id: x.id + offset,
+      title: x.title || x.name,
+      year: Number(String(x.release_date || x.first_air_date || '').slice(0, 4)) || 0,
+      genre: (x.genre_ids || []).map(g => TMDB_GENRE[g]).filter(Boolean).slice(0, 3),
+      rating: Math.round((x.vote_average || 0) * 10) / 10,
+      poster: `${IMG}${x.poster_path}`,
+      posterPath: x.poster_path,
+      desc: x.overview || '',
+      duration: '', ott: [], type,
+      seasons: 0, episodes: 0, status: '', network: '',
+      popularity: x.popularity || 0,
+    }));
+  if (genre && genre !== 'All') {
+    const filtered = rows.filter(r => r.genre.includes(genre));
+    if (filtered.length >= Math.min(5, count)) rows = filtered; // don't starve the deck
+  }
+  return rows.slice(0, count);
+}
+
 export async function GET(req) {
   try {
     const u = new URL(req.url);
@@ -128,25 +177,33 @@ export async function GET(req) {
     const movieCount = clampCount(u.searchParams.get('movieCount'));
     const seriesCount = clampCount(u.searchParams.get('seriesCount'));
 
-    const hot = category === 'hot' ? await hotIds() : null;
+    const hot = category === 'hot' ? await hotIds().catch(() => null) : null;
     const opts = { category, genre, platforms, hot };
 
     const [movies, series] = await Promise.all([
-      type !== 'series' ? buildDeck('movie', movieCount, opts) : [],
-      type !== 'movies' ? buildDeck('series', seriesCount, opts) : [],
+      type !== 'series' ? buildDeck('movie', movieCount, opts).catch(() => []) : [],
+      type !== 'movies' ? buildDeck('series', seriesCount, opts).catch(() => []) : [],
     ]);
 
     let results = [...movies, ...series].map(toItem);
+
+    // Catalog empty/unreachable → build the deck live from TMDB so rooms
+    // still work before seeding.
+    if (results.length === 0) {
+      const [fm, fs] = await Promise.all([
+        type !== 'series' ? tmdbFallbackDeck('movie', movieCount, opts) : [],
+        type !== 'movies' ? tmdbFallbackDeck('series', seriesCount, opts) : [],
+      ]);
+      results = [...fm, ...fs];
+    }
+
     if (type === 'all') results.sort((a, b) => b.popularity - a.popularity);
 
     if (results.length === 0) {
-      const { count } = await sb.from('catalog').select('*', { count: 'exact', head: true });
-      if (!count) {
-        return Response.json(
-          { error: 'Catalog is empty — run `node scripts/seed-catalog.mjs` once (see README).', results: [] },
-          { status: 503 }
-        );
-      }
+      return Response.json(
+        { error: 'No titles available — seed the catalog (GitHub Action "Refresh catalog" or `npm run seed`) and check /api/health.', results: [] },
+        { status: 503 }
+      );
     }
 
     return Response.json({ results, count: results.length });

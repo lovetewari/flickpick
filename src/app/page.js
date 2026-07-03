@@ -39,6 +39,7 @@ export default function Home() {
   const [previewDash, setPreviewDash] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [trend, setTrend] = useState({ state: 'loading', items: [], posters: [] });
+  const [platforms, setPlatforms] = useState([]);
 
   const loadTrending = async (force = false) => {
     setTrend(t => ({ ...t, state: 'loading' }));
@@ -66,6 +67,8 @@ export default function Home() {
     });
     // Trending titles + poster backdrop (single fetch, session-cached)
     loadTrending();
+    // Real streaming-platform logos for the "watch on" row (daily-cached)
+    fetch('/api/providers').then(r => r.json()).then(d => setPlatforms(d.providers || [])).catch(() => {});
     return () => subscription.unsubscribe();
   }, []);
 
@@ -146,6 +149,30 @@ export default function Home() {
         </div>
 
         <p className="text-white/30 text-[12px] mt-10 text-center">Movies & series · 2–12 friends · No downloads</p>
+
+        {/* ── Watch on the platforms you already have ── */}
+        {platforms.length > 0 && (
+          <div className="mt-14 text-center" aria-label="Supported streaming platforms">
+            <p className="text-white/40 text-[13px] font-semibold tracking-wide uppercase mb-5">Find where to watch — across your platforms</p>
+            <div className="flex items-center justify-center gap-3 sm:gap-4 flex-wrap max-w-[760px] mx-auto">
+              {platforms.map(p => (
+                <img key={p.name} src={p.logo} alt={p.name} title={p.name} loading="lazy"
+                  onError={e => { e.currentTarget.style.display = 'none'; }} // broken logo → drop, never a broken-image box
+                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-[12px] object-cover ring-1 ring-white/10 shadow-lg platform-logo" />
+              ))}
+              <span title="IMAX theatrical releases" aria-label="IMAX"
+                className="h-11 sm:h-12 px-3 rounded-[12px] grid place-items-center ring-1 ring-white/10 shadow-lg platform-logo font-black italic tracking-tight text-white text-[15px]"
+                style={{ background: '#0a3d91' }}>
+                IMAX
+              </span>
+            </div>
+            <p className="text-white/25 text-[11px] mt-5 max-w-[560px] mx-auto leading-relaxed">
+              Streaming availability data and platform logos courtesy of <a href="https://www.justwatch.com" target="_blank" rel="noreferrer" className="underline hover:text-white/50">JustWatch</a>, via <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer" className="underline hover:text-white/50">TMDB</a>.
+              All platform names and logos are trademarks of their respective owners; FlickPick is not affiliated with or endorsed by them.
+              This product uses the TMDB API but is not endorsed or certified by TMDB.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* ── Trending this week ── */}

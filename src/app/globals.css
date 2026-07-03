@@ -605,6 +605,24 @@ img {
   transform: none;
 }
 
+/* ── Micro-interactions: trending cards + platform logos ── */
+.trend-card {
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease;
+}
+.trend-card:hover {
+  transform: translateY(-4px) scale(1.03);
+}
+.trend-card:active {
+  transform: translateY(-1px) scale(0.99);
+}
+.platform-logo {
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
+}
+.platform-logo:hover {
+  transform: translateY(-3px) scale(1.08);
+  box-shadow: 0 10px 26px -8px rgba(0, 0, 0, 0.7);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

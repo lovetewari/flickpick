@@ -38,12 +38,17 @@ export async function stubExternal(page, { room = ROOM, players = PLAYERS } = {}
   await page.route('**/rest/v1/swipes**', r => r.fulfill({ json: [] }));
   await page.route('**/rest/v1/profiles**', r => r.fulfill({ json: null }));
   await page.route('**/rest/v1/watch_history**', r => r.fulfill({ json: [] }));
-  await page.route('**/image.tmdb.org/**', r => r.fulfill({
+  const PIXEL = {
     status: 200, contentType: 'image/png',
     // 1×1 transparent PNG
     body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'),
-  }));
-  await page.route('**/api/posters', r => r.fulfill({ json: { posters: [], items: [] } }));
+  };
+  await page.route('**/image.tmdb.org/**', r => r.fulfill(PIXEL));
+  // next/image requests go through the app's optimizer endpoint — stub it so
+  // tests never make real outbound image fetches (fixture URLs are fake).
+  await page.route('**/_next/image**', r => r.fulfill(PIXEL));
+  await page.route('**/api/posters', r => r.fulfill({ json: { posters: [], items: [], wallPosters: [] } }));
+  await page.route('**/api/providers', r => r.fulfill({ json: { providers: [] } }));
 }
 
 export const TREND_ITEMS = [

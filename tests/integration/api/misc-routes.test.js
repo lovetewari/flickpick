@@ -28,6 +28,19 @@ describe('GET /api/posters (trending service)', () => {
     expect(d.wallPosters[0]).toBe('https://image.tmdb.org/t/p/w92/m1.jpg');
   });
 
+  it('rejects junk/untrusted logo urls from the catalog (validation)', async () => {
+    h.current.queue('catalog', { data: [
+      row(1, 'movie', 'good', { providers: ['Netflix'], provider_logos: ['https://image.tmdb.org/t/p/w45/nf.jpg'] }),
+      row(2, 'movie', 'evil', { providers: ['Netflix'], provider_logos: ['https://evil.example.com/steal.png'] }),
+      row(3, 'movie', 'junk', { providers: ['Netflix'], provider_logos: ['javascript:alert(1)'] }),
+    ], error: null });
+    h.current.queue('catalog', { data: [], error: null });
+    const d = await (await getPosters()).json();
+    expect(d.items[0].providerLogos).toEqual(['https://image.tmdb.org/t/p/w45/nf.jpg']); // trusted CDN → kept
+    expect(d.items[1].providerLogos).toEqual([null]);  // foreign host → rejected
+    expect(d.items[2].providerLogos).toEqual([null]);  // scheme junk → rejected
+  });
+
   it('flags a recent movie with no streaming home as In Theaters', async () => {
     const today = new Date().toISOString().slice(0, 10);
     h.current.queue('catalog', { data: [row(9, 'movie', 'fresh', { providers: [], release_date: today })], error: null });

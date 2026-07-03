@@ -5,6 +5,7 @@
 // Icons are inline (no extra network) and posters use small images, so the
 // strip loads fast. Fixed card dimensions ⇒ zero layout shift.
 import { useState } from 'react';
+import Image from 'next/image';
 import { IconFilm, IconTv, IconStar, IconTicket } from '@/components/Icons';
 import { ottBg } from '@/lib/constants';
 
@@ -110,22 +111,27 @@ export default function TrendingStrip({ state, items, onRetry }) {
 
       {state === 'ready' && (
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6" style={{ scrollSnapType: 'x mandatory' }}>
-          {items.map(it => (
+          {items.map((it, i) => (
             <Card key={`${it.type}-${it.id}`}>
-              <div className="relative">
-                <img
+              <div className="trend-card relative w-full aspect-[2/3] rounded-xl overflow-hidden border border-white/10 bg-[#17171d]">
+                <Image
                   src={it.poster}
                   alt={`${it.title} poster`}
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full aspect-[2/3] rounded-xl object-cover border border-white/10 bg-[#17171d]"
+                  fill
+                  sizes="(max-width: 640px) 124px, 142px"
+                  // First on-screen cards load immediately at high priority;
+                  // the rest lazy-load as the strip scrolls.
+                  priority={i < 5}
+                  loading={i < 5 ? 'eager' : 'lazy'}
+                  className="object-cover"
                   onError={e => { e.currentTarget.style.opacity = '0.25'; }}
                 />
                 <ProviderTag item={it} />
               </div>
               <p className="text-white/80 text-[12px] font-semibold mt-2 truncate">{it.title}</p>
               <p className="text-white/40 text-[11px] flex items-center gap-1">
-                {it.year || ''}{it.rating ? <> · <IconStar size={10} /> {it.rating}</> : null}
+                {it.year || ''}
+                {it.rating ? <> · <IconStar size={10} /> {it.rating}<span className="text-white/25">/10</span></> : null}
               </p>
             </Card>
           ))}
