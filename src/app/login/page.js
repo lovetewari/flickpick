@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, backendReady } from '@/lib/supabase';
 import CinematicBG from '@/components/CinematicBG';
-import { IconBrand, IconGoogle, IconArrowRight } from '@/components/Icons';
+import BrandOrbit from '@/components/BrandOrbit';
+import { IconGoogle, IconArrowRight } from '@/components/Icons';
 import { getTrending } from '@/lib/trending';
 
 export default function LoginPage() {
@@ -37,7 +38,7 @@ export default function LoginPage() {
     <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">
       <div className="w-full max-w-[400px]">
         <div className="text-center mb-8 rise">
-          <div className="app-badge floaty mx-auto"><IconBrand size={42} /></div>
+          <BrandOrbit className="login-orbit" />
           <h1 className="wordmark text-[42px] text-white mt-5">FlickPick</h1>
           <p className="text-white/55 text-[15px] mt-2">Sign in to save your history</p>
         </div>

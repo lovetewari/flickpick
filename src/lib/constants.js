@@ -57,14 +57,20 @@ const OTT_EXTRA = {
 const OTT_BG_ALL = { ...OTT_EXTRA, ...OTT_BG };
 
 // Map TMDB / catalog provider names → the short label we display.
+// TMDB lists brand VARIANTS as separate providers ("Apple TV Plus Amazon
+// Channel", "Amazon Prime Video with Ads", "Netflix basic with Ads"…) — all
+// must collapse to one brand or the UI shows duplicate logos side by side.
 const PROVIDER_ALIAS = {
   'Amazon Prime Video': 'Prime Video', 'Amazon Video': 'Prime Video',
   'Disney Plus': 'Disney+', 'Disney+ Hotstar': 'Hotstar', 'JioHotstar': 'Hotstar',
-  'Apple TV Plus': 'Apple TV+', 'Apple TV+': 'Apple TV+',
+  'Apple TV Plus': 'Apple TV+', 'Apple TV': 'Apple TV+',
   'HBO Max': 'Max',
 };
 export function normProvider(name) {
-  const n = String(name || '').trim();
+  let n = String(name || '').trim()
+    .replace(/\s+(Amazon|Apple TV|Roku Premium)\s+Channel$/i, '') // channel resellers → base brand
+    .replace(/\s+(basic\s+)?with\s+ads$/i, '')                    // ad tiers → base brand
+    .replace(/\s+(standard|premium)$/i, '');                      // plan tiers → base brand
   return PROVIDER_ALIAS[n] || n;
 }
 // Brand gradient for a provider chip (falls back to a neutral slate).

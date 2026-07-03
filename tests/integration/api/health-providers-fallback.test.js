@@ -72,6 +72,9 @@ describe('GET /api/providers', () => {
         { provider_name: 'Netflix', logo_path: '/nf.jpg', display_priority: 1 },
         { provider_name: 'Netflix', logo_path: '/dup.jpg', display_priority: 9 }, // deduped
         { provider_name: 'Sketchy', logo_path: '../../etc/passwd', display_priority: 1 }, // invalid path → dropped
+        { provider_name: 'Apple TV', logo_path: '/atv.jpg', display_priority: 4 },        // store variant…
+        { provider_name: 'Apple TV Plus', logo_path: '/atvp.jpg', display_priority: 5 },  // …collapses with this one
+        { provider_name: 'JustWatchTV', logo_path: '/jw.jpg', display_priority: 1 },      // aggregator → excluded
       ] }),
     })));
     try {
@@ -81,6 +84,8 @@ describe('GET /api/providers', () => {
       expect(d.providers.filter(p => p.name === 'Netflix')).toHaveLength(1);
       expect(d.providers.at(-1).name).toBe('Some Obscure TV'); // non-preferred sorts last
       expect(d.providers.find(p => p.name === 'Sketchy')).toBeUndefined(); // invalid logo path rejected
+      expect(d.providers.filter(p => /Apple/.test(p.name))).toHaveLength(1); // variants collapse to one Apple TV+
+      expect(d.providers.find(p => /justwatch/i.test(p.name))).toBeUndefined(); // aggregator excluded
     } finally { vi.unstubAllGlobals(); }
   });
 

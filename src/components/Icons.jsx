@@ -7,7 +7,31 @@ const base = (size) => ({
 
 // Compact FlickPick mark from the brand draft: warm-gradient play flag with a
 // white play triangle. Self-colored — works on dark and light backgrounds.
-export function IconBrand({ size = 22 }) {
+export function IconBrand({ size = 22, framed = false }) {
+  if (framed) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="fp-brand-tile-g" x1="7" y1="5" x2="57" y2="59" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#FFB020" />
+            <stop offset="0.5" stopColor="#FF375F" />
+            <stop offset="1" stopColor="#BF5AF2" />
+          </linearGradient>
+          <radialGradient id="fp-brand-tile-hi" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(18 12) rotate(53) scale(54)">
+            <stop stopColor="#FFFFFF" stopOpacity="0.36" />
+            <stop offset="0.48" stopColor="#FFFFFF" stopOpacity="0.08" />
+            <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <rect x="1.5" y="1.5" width="61" height="61" rx="16" fill="url(#fp-brand-tile-g)" />
+        <rect x="1.5" y="1.5" width="61" height="61" rx="16" fill="url(#fp-brand-tile-hi)" />
+        <rect x="1.5" y="1.5" width="61" height="61" rx="16" stroke="rgba(255,255,255,.42)" />
+        <path d="M21 14.8 48.1 28.9c2.4 1.25 2.4 4.95 0 6.2L21 49.2c-2.3 1.2-5-.45-5-3.08V17.88c0-2.63 2.7-4.28 5-3.08Z" fill="rgba(255,255,255,.96)" />
+        <path d="M29 25.2 41.7 32 29 38.8Z" fill="#1A1022" opacity="0.92" />
+      </svg>
+    );
+  }
+
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <defs>
@@ -203,6 +227,83 @@ export function IconTrophy({ size = 22 }) {
       <path d="M7 4.5h10v4a5 5 0 0 1-10 0Z" />
       <path d="M7 6H4.5v1.5A3 3 0 0 0 7.5 10M17 6h2.5v1.5A3 3 0 0 1 16.5 10" />
       <path d="M12 13.5V17M8.5 20.5h7M9.5 20.5c0-1.5 1-3.5 2.5-3.5s2.5 2 2.5 3.5" />
+    </svg>
+  );
+}
+
+const tileIconBase = (size) => ({
+  width: size,
+  height: size,
+  viewBox: '0 0 32 32',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2.45,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+});
+
+// Dashboard app glyphs. These share a 32px optical grid and line weight, so the
+// tray reads like one coherent product surface instead of mixed stock icons.
+export function IconHostRoom({ size = 32 }) {
+  return (
+    <svg {...tileIconBase(size)}>
+      <rect x="7" y="8" width="18" height="16" rx="4.2" />
+      <path d="M16 12.4v7.2M12.4 16h7.2" strokeWidth="2.8" />
+    </svg>
+  );
+}
+
+export function IconJoinRoom({ size = 32 }) {
+  return (
+    <svg {...tileIconBase(size)}>
+      <path d="M7.5 8.2h8.2a3 3 0 0 1 3 3v9.6a3 3 0 0 1-3 3H7.5" />
+      <path d="M14 16h11M21.2 12.2 25 16l-3.8 3.8" strokeWidth="2.8" />
+    </svg>
+  );
+}
+
+export function IconWatchHistory({ size = 32 }) {
+  return (
+    <svg {...tileIconBase(size)}>
+      <path d="M9.2 8.8A10.2 10.2 0 1 1 6 16.2" />
+      <path d="M6.1 8.1h3.7v3.7" />
+      <path d="M16 10.4v6l4.1 2.5" strokeWidth="2.55" />
+    </svg>
+  );
+}
+
+export function IconMatchTile({ size = 32 }) {
+  return (
+    <svg {...tileIconBase(size)}>
+      <path d="M16 25.2S7 20 7 13.7A5.35 5.35 0 0 1 16 10a5.35 5.35 0 0 1 9 3.7c0 6.3-9 11.5-9 11.5Z" />
+    </svg>
+  );
+}
+
+export function IconRoomsTile({ size = 32 }) {
+  return (
+    <svg {...tileIconBase(size)}>
+      <path d="M6.5 15.4 16 7.8l9.5 7.6" />
+      <path d="M9.4 13.4v10a1.8 1.8 0 0 0 1.8 1.8h9.6a1.8 1.8 0 0 0 1.8-1.8v-10" />
+      <path d="M13.1 25.2v-5.4a1.7 1.7 0 0 1 1.7-1.7h2.4a1.7 1.7 0 0 1 1.7 1.7v5.4" />
+    </svg>
+  );
+}
+
+export function IconProfileTile({ size = 32 }) {
+  return (
+    <svg {...tileIconBase(size)}>
+      <circle cx="16" cy="11.6" r="4.5" />
+      <path d="M7.8 25.1c.75-4.8 4.05-7.3 8.2-7.3s7.45 2.5 8.2 7.3" />
+    </svg>
+  );
+}
+
+export function IconLock({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3Z" />
     </svg>
   );
 }

@@ -19,13 +19,31 @@ describe('GET /api/posters (trending service)', () => {
     h.current.queue('catalog', { data: [row(100000003, 'series', 's1', { providers: ['Amazon Prime Video'], provider_logos: ['https://image.tmdb.org/t/p/w45/pv.jpg'] })], error: null });
     const d = await (await getPosters()).json();
     expect(d.items.map(i => i.title)).toEqual(['m1', 's1', 'm2']); // interleaved mix
+    expect(d.week).toMatch(/^\d{4}-W\d{2}$/);
+    expect(d.items.map(i => i.rank)).toEqual([1, 2, 3]);
     expect(d.items[0]).toMatchObject({ type: 'movie', year: 2024, rating: 7.8, poster: 'https://image.tmdb.org/t/p/w185/m1.jpg' });
+    expect(d.items[0].detailsUrl).toBe('https://www.themoviedb.org/movie/1');
+    expect(d.items[1].detailsUrl).toBe('https://www.themoviedb.org/tv/3');
     expect(d.items[0].providers).toEqual(['Netflix']);
     expect(d.items[0].providerLogos).toEqual(['https://image.tmdb.org/t/p/w45/nf.jpg']); // real logo passed through
     expect(d.items[1].providers).toEqual(['Prime Video']); // normalized from "Amazon Prime Video"
     expect(d.posters).toEqual(d.items.map(i => i.poster));
     // Wall gets thumbnail-size variants (w185 → w92)
     expect(d.wallPosters[0]).toBe('https://image.tmdb.org/t/p/w92/m1.jpg');
+  });
+
+  it('promotes this week’s liked titles ahead of popularity ranking', async () => {
+    h.current.queue('swipes', { data: [
+      { content_id: 2, content_type: 'movie', created_at: new Date().toISOString() },
+      { content_id: 2, content_type: 'movie', created_at: new Date().toISOString() },
+    ], error: null });
+    h.current.queue('catalog', { data: [row(1, 'movie', 'popular'), row(2, 'movie', 'liked')], error: null });
+    h.current.queue('catalog', { data: [], error: null });
+    h.current.queue('catalog', { data: [row(2, 'movie', 'liked')], error: null });
+
+    const d = await (await getPosters()).json();
+    expect(d.items[0]).toMatchObject({ title: 'liked', rank: 1 });
+    expect(d.items.map(i => i.title)).toEqual(['liked', 'popular']);
   });
 
   it('rejects junk/untrusted logo urls from the catalog (validation)', async () => {
@@ -55,6 +73,7 @@ describe('GET /api/posters (trending service)', () => {
     h.current.queue('catalog', () => { throw new Error('no db'); });
     const feed = names => ({ feed: { entry: names.map(([n, y], i) => ({
       id: { attributes: { 'im:id': String(1000 + i) } },
+      link: [{ attributes: { rel: 'alternate', href: `https://itunes.apple.com/movie/${encodeURIComponent(n)}` } }],
       'im:name': { label: n },
       'im:image': [{}, {}, { label: `https://is1-ssl.mzstatic.com/x/${n}/170x170bb.png` }],
       'im:releaseDate': { label: `${y}-05-01T00:00:00-07:00` },
@@ -72,6 +91,9 @@ describe('GET /api/posters (trending service)', () => {
       expect(d.items[0].poster).toContain('/300x450bb.jpg'); // upscaled artwork, jpg (smaller than png)
       expect(d.wallPosters[0]).toContain('/150x225bb.jpg');   // thumbnail for the backdrop wall
       expect(d.items[0].year).toBe(2026);
+      expect(d.items[0].providers).toEqual([]); // iTunes is a chart source, not availability
+      expect(d.items[0].providerLogos).toEqual([]);
+      expect(d.items[0].detailsUrl).toBe('https://itunes.apple.com/movie/Dune%203');
     } finally { vi.unstubAllGlobals(); }
   });
 

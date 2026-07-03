@@ -3,7 +3,7 @@
 // body scroll lock, focus restore, smooth open animation, mobile-safe sizing.
 import { useEffect, useRef } from 'react';
 
-export default function Modal({ open, onClose, label, children }) {
+export default function Modal({ open, onClose, label, children, className = '' }) {
   const panelRef = useRef(null);
   const lastActive = useRef(null);
 
@@ -38,7 +38,7 @@ export default function Modal({ open, onClose, label, children }) {
   if (!open) return null;
   return (
     <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className="modal-panel dash-card p-6">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className={`modal-panel dash-card p-6 ${className}`}>
         {children}
       </div>
     </div>

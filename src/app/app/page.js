@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Dashboard from '@/components/Dashboard';
+import BrandLoader from '@/components/BrandLoader';
 
 export default function AppHome() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function AppHome() {
 
   if (!ready) return (
     <div className="dash">
-      <div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div>
+      <div className="relative z-10"><BrandLoader label="Opening FlickPick…" /></div>
     </div>
   );
 

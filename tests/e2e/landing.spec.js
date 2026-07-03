@@ -54,6 +54,8 @@ test.describe('landing page', () => {
 
   test('login page "Continue as guest" enters the app (not a redirect loop)', async ({ page }) => {
     await page.goto('/login');
+    await expect(page.locator('.login-orbit .hero-center')).toBeVisible();
+    expect(await page.locator('.login-orbit .sat').count()).toBe(7);
     await page.getByRole('button', { name: /Continue as guest/ }).click();
     await expect(page).toHaveURL(/\/app/);
     await expect(page.getByRole('button', { name: /Host a room/ })).toBeVisible();
@@ -64,10 +66,12 @@ test.describe('landing page', () => {
     await page.route('**/api/providers', r => r.fulfill({ json: { providers: [
       { name: 'Netflix', logo: 'https://image.tmdb.org/t/p/w92/nf.jpg' },
       { name: 'Prime Video', logo: 'https://image.tmdb.org/t/p/w92/pv.jpg' },
+      { name: 'Apple TV+', logo: 'https://image.tmdb.org/t/p/w92/atv.jpg' },
     ] } }));
     await page.goto('/');
     await expect(page.getByAltText('Netflix')).toBeVisible();
     await expect(page.getByAltText('Prime Video')).toBeVisible();
+    await expect(page.getByAltText('Apple TV+')).toBeVisible();
     await expect(page.getByText('IMAX', { exact: true })).toBeVisible();
     await expect(page.getByText(/courtesy of/)).toBeVisible();        // JustWatch/TMDB credit
     await expect(page.getByText(/not endorsed or certified by TMDB/)).toBeVisible();

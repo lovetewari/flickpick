@@ -48,7 +48,9 @@
       "Bash(curl -s -o /dev/null -w '  %{size_download} bytes\\\\n' https://is1-ssl.mzstatic.com/image/thumb/Video221/v4/26/db/16/26db1681-d180-1d95-cb5d-7c6f3199e8fe/OBSESSION_PVOD_LSR_2000x3000_Poster.jpg/150x225bb.jpg)",
       "Bash(npm ls *)",
       "Bash(sed -i '' 's/node-version: 20, cache: npm/node-version: 22, cache: npm/g' .github/workflows/ci.yml)",
-      "Bash(sed -i '' 's/node-version: 20$/node-version: 22/' .github/workflows/refresh-catalog.yml)"
+      "Bash(sed -i '' 's/node-version: 20$/node-version: 22/' .github/workflows/refresh-catalog.yml)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(xargs kill -9)"
     ]
   }
 }

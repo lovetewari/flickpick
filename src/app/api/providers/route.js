@@ -1,7 +1,7 @@
 // Streaming platforms row for the landing — REAL provider logos served from
 // TMDB's watch-provider registry (data & logos courtesy of JustWatch via
 // TMDB; we render the required attribution next to them in the UI).
-import { isValidLogoUrl } from '@/lib/constants';
+import { isValidLogoUrl, normProvider } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,12 +12,6 @@ const PREFERRED = ['Netflix', 'Prime Video', 'Hotstar', 'Disney+', 'Apple TV+', 
 
 const TTL = process.env.NODE_ENV === 'test' ? 0 : 24 * 60 * 60 * 1000; // daily
 let CACHE = { t: 0, payload: null };
-
-const ALIAS = {
-  'Amazon Prime Video': 'Prime Video', 'Disney Plus': 'Disney+',
-  'Disney+ Hotstar': 'Hotstar', 'JioHotstar': 'Hotstar', 'HBO Max': 'Max',
-  'Apple TV Plus': 'Apple TV+',
-};
 
 export async function GET() {
   try {
@@ -32,8 +26,9 @@ export async function GET() {
     const d = await r.json();
     const seen = new Map();
     for (const p of d.results || []) {
-      const name = ALIAS[p.provider_name] || p.provider_name;
-      if (!p.logo_path || seen.has(name)) continue;
+      const name = normProvider(p.provider_name);
+      if (!name || !p.logo_path || seen.has(name)) continue;
+      if (/justwatch/i.test(name)) continue; // data aggregator, not a streaming platform
       const logo = `${LOGO}${p.logo_path}`;
       if (!isValidLogoUrl(logo)) continue; // only trusted TMDB CDN logos
       seen.set(name, {

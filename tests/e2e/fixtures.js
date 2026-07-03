@@ -30,13 +30,13 @@ export const RESULTS = {
 };
 
 // Block/stub every external call the app can make.
-export async function stubExternal(page, { room = ROOM, players = PLAYERS } = {}) {
+export async function stubExternal(page, { room = ROOM, players = PLAYERS, profile = null } = {}) {
   await page.route('**/auth/v1/**', r => r.fulfill({ json: { user: null, session: null } }));
   await page.route('**/realtime/**', r => r.abort());
   await page.route('**/rest/v1/rooms**', r => r.fulfill({ json: room }));
   await page.route('**/rest/v1/players**', r => r.fulfill({ json: players }));
   await page.route('**/rest/v1/swipes**', r => r.fulfill({ json: [] }));
-  await page.route('**/rest/v1/profiles**', r => r.fulfill({ json: null }));
+  await page.route('**/rest/v1/profiles**', r => r.fulfill({ json: profile }));
   await page.route('**/rest/v1/watch_history**', r => r.fulfill({ json: [] }));
   const PIXEL = {
     status: 200, contentType: 'image/png',
@@ -52,13 +52,38 @@ export async function stubExternal(page, { room = ROOM, players = PLAYERS } = {}
 }
 
 export const TREND_ITEMS = [
-  { id: 603, title: 'The Matrix', poster: 'https://image.tmdb.org/t/p/w185/m1.jpg', year: 1999, type: 'movie', rating: 8.2, providers: ['Netflix'], providerLogos: [null], inTheaters: false },
-  { id: 100001396, title: 'Breaking Bad', poster: 'https://image.tmdb.org/t/p/w185/s1.jpg', year: 2008, type: 'series', rating: 8.9, providers: ['Prime Video'], providerLogos: [null], inTheaters: false },
-  { id: 27205, title: 'Inception', poster: 'https://image.tmdb.org/t/p/w185/m2.jpg', year: 2010, type: 'movie', rating: 8.4, providers: [], providerLogos: [], inTheaters: true },
+  { id: 603, title: 'The Matrix', poster: 'https://image.tmdb.org/t/p/w185/m1.jpg', year: 1999, type: 'movie', rating: 8.2, providers: ['Netflix'], providerLogos: [null], inTheaters: false, detailsUrl: 'https://www.themoviedb.org/movie/603' },
+  { id: 100001396, title: 'Breaking Bad', poster: 'https://image.tmdb.org/t/p/w185/s1.jpg', year: 2008, type: 'series', rating: 8.9, providers: ['Prime Video'], providerLogos: [null], inTheaters: false, detailsUrl: 'https://www.themoviedb.org/tv/1396' },
+  { id: 27205, title: 'Inception', poster: 'https://image.tmdb.org/t/p/w185/m2.jpg', year: 2010, type: 'movie', rating: 8.4, providers: [], providerLogos: [], inTheaters: true, detailsUrl: 'https://www.themoviedb.org/movie/27205' },
 ];
 
 export async function seedGuest(page) {
   await page.addInitScript(() => localStorage.setItem('fp_guest', '1'));
+}
+
+export async function seedSignedIn(page, {
+  id = 'user_123',
+  email = 'ava@example.com',
+  name = 'Ava',
+} = {}) {
+  await page.addInitScript(([userId, userEmail, fullName]) => {
+    localStorage.removeItem('fp_guest');
+    localStorage.setItem('sb-test-auth-token', JSON.stringify({
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: userId,
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: userEmail,
+        app_metadata: {},
+        user_metadata: { full_name: fullName },
+      },
+    }));
+  }, [id, email, name]);
 }
 
 export async function seedSession(page, { code = 'ABC234', host = true, token = 'tok_host' } = {}) {

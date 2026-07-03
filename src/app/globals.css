@@ -597,17 +597,62 @@ img {
 }
 
 /* ── Locked (sign-in required) tiles ── */
+/* Softer mute + an explicit lock badge, so the tile reads "locked", never
+   "broken". Tile stays recognizable; the padlock explains why. */
 .tile-lockable[aria-disabled='true'] {
-  opacity: 0.45;
-  filter: saturate(0.4);
+  opacity: 1;
+  filter: none;
 }
 .tile-lockable[aria-disabled='true']:hover .dash-tile {
   transform: none;
 }
+.tile-lockable[aria-disabled='true'] .dash-tile {
+  color: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.58), inset 0 1.5px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -5px 10px rgba(0, 0, 0, 0.34);
+}
+.tile-lockable[aria-disabled='true'] .dash-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgba(7, 7, 10, 0.28);
+}
+.tile-lockable[aria-disabled='true'] .dash-app-label {
+  color: rgba(255, 255, 255, 0.68);
+}
+.lock-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  z-index: 5;
+  background: rgba(15, 15, 20, 0.96);
+  border: 1.5px solid rgba(255, 255, 255, 0.36);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
 
 /* ── Micro-interactions: trending cards + platform logos ── */
 .trend-card {
+  display: block;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
   transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease;
+  animation: trendCardIn 0.48s cubic-bezier(0.18, 0.86, 0.24, 1.08) backwards;
+  animation-delay: calc(var(--rank-index, 0) * 45ms);
+}
+.trend-card:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 3px;
 }
 .trend-card:hover {
   transform: translateY(-4px) scale(1.03);
@@ -621,6 +666,233 @@ img {
 .platform-logo:hover {
   transform: translateY(-3px) scale(1.08);
   box-shadow: 0 10px 26px -8px rgba(0, 0, 0, 0.7);
+}
+.trending-rail {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 10px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.trending-rail::-webkit-scrollbar {
+  display: none;
+}
+.trending-track {
+  width: max-content;
+  display: flex;
+  gap: 14px;
+  will-change: transform;
+}
+.trending-rail[data-animate='true'] .trending-track {
+  animation: trendingDrift 6.5s ease-in-out 1.2s infinite;
+}
+.trending-rail:hover .trending-track,
+.trending-rail:focus-within .trending-track {
+  animation-play-state: paused;
+}
+.trend-card-shell {
+  flex: 0 0 auto;
+  width: 124px;
+  scroll-snap-align: start;
+}
+.rank-badge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 5;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 9, 12, 0.78);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.8);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  animation: rankPop 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) both;
+  animation-delay: calc(120ms + var(--rank-index, 0) * 45ms);
+}
+.rank-badge-top {
+  background: linear-gradient(145deg, #ffb047, #ff375f 58%, #bf5af2);
+  border-color: rgba(255, 255, 255, 0.34);
+  animation: rankPop 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) both,
+    rankPulse 2.8s ease-in-out 1.2s infinite;
+  animation-delay: calc(120ms + var(--rank-index, 0) * 45ms), calc(1s + var(--rank-index, 0) * 120ms);
+}
+.provider-stack {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.provider-single {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 8px 18px -9px rgba(0, 0, 0, 0.85);
+}
+.provider-mark-img,
+.provider-mark-fallback,
+.provider-more {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  box-shadow: 0 8px 18px -9px rgba(0, 0, 0, 0.85);
+}
+.provider-mark-img {
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.22);
+}
+.provider-mark-fallback,
+.provider-more {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.provider-more {
+  background: rgba(7, 7, 10, 0.72);
+}
+@keyframes trendingDrift {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(clamp(-34px, -3vw, -18px));
+  }
+}
+@keyframes trendCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rankPop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rankPulse {
+  0%,
+  100% {
+    box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.8);
+  }
+  50% {
+    box-shadow: 0 10px 24px -8px rgba(255, 55, 95, 0.72);
+  }
+}
+
+.trend-modal-panel {
+  max-width: 520px;
+  border-radius: 22px;
+}
+.trend-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.trend-modal-kicker {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.trend-modal-title {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.08;
+  margin-top: 3px;
+}
+.trend-modal-close {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+.trend-modal-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  transform: scale(1.04);
+}
+.trend-modal-body {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.trend-modal-poster {
+  width: 132px;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #17171d;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 34px -22px rgba(0, 0, 0, 0.85);
+}
+.trend-modal-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.trend-modal-copy {
+  min-width: 0;
+}
+.trend-modal-meta {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 13px;
+  font-weight: 700;
+}
+.trend-modal-availability {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 15px;
+  line-height: 1.45;
+  margin-top: 8px;
+}
+.trend-modal-availability strong {
+  color: #fff;
+  font-weight: 800;
+}
+.trend-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -778,6 +1050,28 @@ div.pframe::after {
   width: var(--w);
   height: var(--w);
   margin: 0 auto;
+}
+.login-orbit {
+  --w: min(245px, 70vw);
+}
+.loader-orbit {
+  --w: min(178px, 54vw);
+}
+.brand-loader {
+  display: flex;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+}
+.brand-loader-label {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 /* 0×0 anchor placed exactly on the ring point: rotate → push out → un-rotate.
    Keeping the anchor dimensionless makes the geometry exact (no origin drift). */
@@ -954,34 +1248,155 @@ div.pframe::after {
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   box-shadow: 0 24px 56px -22px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
+.profile-sync-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.58);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.profile-sync-link:hover {
+  color: #fff;
+}
+.profile-sync-link:focus-visible {
+  outline: none;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(255, 55, 95, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+.dashboard-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.dashboard-brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-shadow: 0 10px 24px -10px rgba(255, 55, 95, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.dashboard-brand-logo svg {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+.dash-app-tray {
+  min-width: 0;
+}
+.dash-app {
+  min-width: 0;
+  border-radius: 16px;
+  padding: 3px 2px 1px;
+}
+.dash-app[data-tone='host'] {
+  --tile-bg: linear-gradient(145deg, #ffb047 0%, #ff5a3f 48%, #f22f5d 100%);
+  --tile-glow: rgba(255, 93, 48, 0.42);
+}
+.dash-app[data-tone='join'] {
+  --tile-bg: linear-gradient(145deg, #d9a7ff 0%, #9657ff 48%, #6a35e8 100%);
+  --tile-glow: rgba(150, 87, 255, 0.42);
+}
+.dash-app[data-tone='history'] {
+  --tile-bg: linear-gradient(145deg, #79dbe0 0%, #23aebb 46%, #157f91 100%);
+  --tile-glow: rgba(35, 174, 187, 0.4);
+}
+.dash-app[data-tone='matches'] {
+  --tile-bg: linear-gradient(145deg, #ff9bc4 0%, #db4f84 48%, #b51f62 100%);
+  --tile-glow: rgba(219, 79, 132, 0.42);
+}
+.dash-app[data-tone='rooms'] {
+  --tile-bg: linear-gradient(145deg, #f4d078 0%, #c99a32 48%, #9e761e 100%);
+  --tile-glow: rgba(201, 154, 50, 0.4);
+}
+.dash-app[data-tone='profile'] {
+  --tile-bg: linear-gradient(145deg, #7ce3a0 0%, #2dbb72 48%, #148552 100%);
+  --tile-glow: rgba(45, 187, 114, 0.4);
+}
+.dash-app-label {
+  width: 100%;
+  min-height: 28px;
+  max-width: 86px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  color: #fff;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+}
 .dash-tile {
   position: relative;
-  width: 62px;
-  height: 62px;
-  border-radius: 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 17px;
   display: grid;
   place-items: center;
   color: #fff;
-  overflow: hidden;
-  box-shadow: 0 8px 18px -6px rgba(0, 0, 0, 0.5), inset 0 1.5px 0 rgba(255, 255, 255, 0.5),
+  /* no overflow:hidden — the lock badge sits just outside the corner */
+  background: var(--tile-bg);
+  box-shadow: 0 12px 24px -10px var(--tile-glow, rgba(0, 0, 0, 0.45)), 0 8px 18px -6px rgba(0, 0, 0, 0.55), inset 0 1.5px 0 rgba(255, 255, 255, 0.52),
     inset 0 -5px 10px rgba(0, 0, 0, 0.28);
-  transition: transform 0.16s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+.dash-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(75% 72% at 24% 16%, rgba(255, 255, 255, 0.34), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 42%, rgba(0, 0, 0, 0.16));
 }
 .dash-tile::after {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 2;
   border-radius: inherit;
   pointer-events: none;
   background: linear-gradient(148deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1) 28%, transparent 48%);
 }
 .dash-tile > * {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
 }
+.dash-glyph {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.96);
+}
+.dash-glyph svg {
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+.dash-glyph path,
+.dash-glyph rect,
+.dash-glyph circle {
+  vector-effect: non-scaling-stroke;
+}
 .dash-app:hover .dash-tile {
-  transform: translateY(-3px) scale(1.05);
+  transform: translateY(-3px) scale(1.045);
+  filter: saturate(1.08) brightness(1.03);
 }
 
 /* ── Interior screen backgrounds ── */
@@ -998,4 +1413,60 @@ div.pframe::after {
   background: radial-gradient(62% 42% at 50% -6%, rgba(255, 55, 95, 0.1), transparent 64%),
     radial-gradient(52% 38% at 102% 104%, rgba(191, 90, 242, 0.09), transparent 62%),
     #111114;
+}
+
+@media (max-width: 640px) {
+  .login-orbit {
+    --w: min(220px, 76vw);
+  }
+  .loader-orbit {
+    --w: min(158px, 58vw);
+  }
+  .dashboard-brand-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+  .dashboard-brand-logo svg {
+    width: 32px;
+    height: 32px;
+  }
+  .dash-app-tray {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .dash-tile {
+    width: 62px;
+    height: 62px;
+  }
+  .dash-app-label {
+    min-height: 30px;
+  }
+  .trend-card-shell {
+    width: 122px;
+  }
+  .trend-modal-panel {
+    max-width: min(420px, calc(100vw - 28px));
+    padding: 20px !important;
+  }
+  .trend-modal-title {
+    font-size: 21px;
+  }
+  .trend-modal-body {
+    grid-template-columns: 96px 1fr;
+    gap: 13px;
+  }
+  .trend-modal-poster {
+    width: 96px;
+    border-radius: 12px;
+  }
+  .trend-modal-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 640px) {
+  .trend-card-shell {
+    width: 142px;
+  }
 }

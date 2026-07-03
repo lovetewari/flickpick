@@ -6,14 +6,15 @@
 // strip loads fast. Fixed card dimensions ⇒ zero layout shift.
 import { useState } from 'react';
 import Image from 'next/image';
-import { IconFilm, IconTv, IconStar, IconTicket } from '@/components/Icons';
+import Modal from '@/components/Modal';
+import { IconArrowRight, IconClose, IconFilm, IconStar, IconTicket, IconTv } from '@/components/Icons';
 import { ottBg } from '@/lib/constants';
 
 // Signature glyph per platform — colour does most of the recognition work.
 const GLYPH = {
-  Netflix: 'N', 'Prime Video': '▶', 'Disney+': '+', 'Apple TV+': '▶',
-  'Apple TV': '▶', Max: 'M', Hulu: 'h', Hotstar: '★', 'Paramount+': '▲',
-  Peacock: '●', JioCinema: '▶', ZEE5: 'Z', SonyLIV: 'S',
+  Netflix: 'N', 'Prime Video': 'PV', 'Disney+': 'D+', 'Apple TV+': 'tv+',
+  'Apple TV': 'tv+', Max: 'M', Hulu: 'h', Hotstar: 'HS', 'Paramount+': 'P+',
+  Peacock: 'P', JioCinema: 'Jio', ZEE5: 'Z5', SonyLIV: 'SL',
 };
 const glyphFor = name => GLYPH[name] || '▶';
 
@@ -25,12 +26,12 @@ function ProviderMark({ name, logo }) {
     return (
       <img src={logo} alt={name} title={name} loading="lazy" decoding="async"
         onError={() => setBroken(true)}
-        className="w-5 h-5 rounded-[6px] object-cover shadow ring-1 ring-black/20" />
+        className="provider-mark-img" />
     );
   }
   return (
     <span role="img" aria-label={name}
-      className="w-5 h-5 rounded-[6px] grid place-items-center text-white text-[11px] font-black leading-none shadow"
+      className="provider-mark-fallback"
       style={{ background: ottBg(name) }}>
       {glyphFor(name)}
     </span>
@@ -42,10 +43,10 @@ function ProviderTag({ item }) {
   const logos = item.providerLogos || [];
   if (providers.length) {
     return (
-      <div className="absolute top-1.5 left-1.5 flex gap-1" title={`Where to watch: ${providers.join(', ')}`}>
+      <div className="provider-stack" title={`Where to watch: ${providers.join(', ')}`}>
         {providers.slice(0, 2).map((p, i) => <ProviderMark key={p} name={p} logo={logos[i]} />)}
         {providers.length > 2 && (
-          <span aria-hidden="true" className="w-5 h-5 rounded-[6px] grid place-items-center text-white text-[9px] font-bold bg-black/55">
+          <span aria-hidden="true" className="provider-more">
             +{providers.length - 2}
           </span>
         )}
@@ -55,14 +56,14 @@ function ProviderTag({ item }) {
   if (item.inTheaters) {
     return (
       <span role="img" aria-label="In theaters"
-        className="absolute top-1.5 left-1.5 w-5 h-5 rounded-[6px] grid place-items-center text-white shadow"
+        className="provider-stack provider-single"
         style={{ background: 'linear-gradient(135deg,#ff9f0a,#ff375f)' }}>
         <IconTicket size={12} />
       </span>
     );
   }
   return (
-    <span className={`badge absolute top-1.5 left-1.5 ${item.type === 'series' ? 'badge-series' : 'badge-movie'}`}
+    <span className={`badge provider-stack provider-single ${item.type === 'series' ? 'badge-series' : 'badge-movie'}`}
       role="img" aria-label={item.type === 'series' ? 'Series' : 'Movie'}>
       {item.type === 'series' ? <IconTv size={10} /> : <IconFilm size={10} />}
     </span>
@@ -70,10 +71,20 @@ function ProviderTag({ item }) {
 }
 
 function Card({ children }) {
-  return <div className="shrink-0 w-[124px] sm:w-[142px]" style={{ scrollSnapAlign: 'start' }}>{children}</div>;
+  return <div className="trend-card-shell">{children}</div>;
+}
+
+function AvailabilityText({ item }) {
+  const providers = item.providers || [];
+  if (providers.length) return <>Available on <strong>{providers.join(', ')}</strong></>;
+  if (item.inTheaters) return <>Currently marked as <strong>in theaters</strong></>;
+  return <>Provider availability is not confirmed yet.</>;
 }
 
 export default function TrendingStrip({ state, items, onRetry }) {
+  const [selected, setSelected] = useState(null);
+  const selectedRank = selected ? selected.rank || items.findIndex(i => i.id === selected.id && i.type === selected.type) + 1 : null;
+
   return (
     <section aria-label="Trending this week" className="relative z-10 max-w-content mx-auto px-6 pb-16 sm:pb-24 w-full">
       <div className="flex items-end justify-between mb-4">
@@ -110,10 +121,20 @@ export default function TrendingStrip({ state, items, onRetry }) {
       )}
 
       {state === 'ready' && (
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6" style={{ scrollSnapType: 'x mandatory' }}>
+        <div className="trending-rail -mx-6 px-6" data-animate={items.length > 4 ? 'true' : 'false'}>
+          <div className="trending-track">
           {items.map((it, i) => (
             <Card key={`${it.type}-${it.id}`}>
-              <div className="trend-card relative w-full aspect-[2/3] rounded-xl overflow-hidden border border-white/10 bg-[#17171d]">
+              <button
+                type="button"
+                className="trend-card relative w-full aspect-[2/3] rounded-xl overflow-hidden border border-white/10 bg-[#17171d] text-left"
+                aria-label={`Open options for ${it.title}`}
+                onClick={() => setSelected(it)}
+                style={{ '--rank-index': i }}
+              >
+                <span className={`rank-badge ${i < 3 ? 'rank-badge-top' : ''}`} aria-label={`Rank ${it.rank || i + 1}`}>
+                  {it.rank || i + 1}
+                </span>
                 <Image
                   src={it.poster}
                   alt={`${it.title} poster`}
@@ -127,16 +148,66 @@ export default function TrendingStrip({ state, items, onRetry }) {
                   onError={e => { e.currentTarget.style.opacity = '0.25'; }}
                 />
                 <ProviderTag item={it} />
-              </div>
+              </button>
               <p className="text-white/80 text-[12px] font-semibold mt-2 truncate">{it.title}</p>
               <p className="text-white/40 text-[11px] flex items-center gap-1">
                 {it.year || ''}
-                {it.rating ? <> · <IconStar size={10} /> {it.rating}<span className="text-white/25">/10</span></> : null}
+                {it.rating ? <> · <IconStar size={10} /> <span>{it.rating}<span className="text-white/25">/10</span></span></> : null}
               </p>
             </Card>
           ))}
+          </div>
         </div>
       )}
+
+      <Modal
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        label={selected ? `Open ${selected.title}` : 'Title options'}
+        className="trend-modal-panel"
+      >
+        {selected && (
+          <div>
+            <div className="trend-modal-head">
+              <div>
+                <p className="trend-modal-kicker">Trending #{selectedRank}</p>
+                <h3 className="trend-modal-title">{selected.title}</h3>
+              </div>
+              <button type="button" onClick={() => setSelected(null)} aria-label="Close title options" className="trend-modal-close">
+                <IconClose size={18} />
+              </button>
+            </div>
+
+            <div className="trend-modal-body">
+              <div className="trend-modal-poster">
+                <img src={selected.poster} alt={`${selected.title} poster`} />
+              </div>
+              <div className="trend-modal-copy">
+                <p className="trend-modal-meta">
+                  {selected.year || 'Unknown year'} · {selected.type === 'series' ? 'Series' : 'Movie'}
+                  {selected.rating ? ` · ${selected.rating}/10` : ''}
+                </p>
+                <p className="trend-modal-availability"><AvailabilityText item={selected} /></p>
+              </div>
+            </div>
+
+            <div className="trend-modal-actions">
+              <button type="button" onClick={() => setSelected(null)} className="btn btn-ghost btn-block">
+                Stay here
+              </button>
+              {selected.detailsUrl ? (
+                <a href={selected.detailsUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-block">
+                  Open title <IconArrowRight size={17} />
+                </a>
+              ) : (
+                <button type="button" className="btn btn-primary btn-block" disabled>
+                  Title link unavailable
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </section>
   );
 }

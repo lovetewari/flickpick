@@ -11,6 +11,17 @@ const display = Space_Grotesk({
 export const metadata = {
   title: 'FlickPick — Movie Night, Decided',
   description: 'Swipe together, match instantly, watch tonight. Movies & series, powered by TMDB.',
+  applicationName: 'FlickPick',
+  icons: {
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml', sizes: 'any' }],
+    shortcut: [{ url: '/icon.svg', type: 'image/svg+xml', sizes: 'any' }],
+    apple: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'FlickPick',
+    statusBarStyle: 'black-translucent',
+  },
 };
 
 export const viewport = {

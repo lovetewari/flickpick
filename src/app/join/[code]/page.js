@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import CinematicBG from '@/components/CinematicBG';
 import Toast from '@/components/Toast';
+import BrandLoader from '@/components/BrandLoader';
 import { IconBrand, IconArrowRight } from '@/components/Icons';
 
 export default function JoinPage() {
@@ -64,7 +65,7 @@ export default function JoinPage() {
     }
   };
 
-  if (redirecting) return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
+  if (redirecting) return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Taking you to the room…" /></div></>);
 
   if (notFound) return (<><CinematicBG variant="content" />
     <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">

@@ -6,6 +6,7 @@ import { OTT_PLATFORMS, OTT_BG, GENRES, CONTENT_TYPES, getCategoriesForType, COL
 import CinematicBG from '@/components/CinematicBG';
 import Toast from '@/components/Toast';
 import SwipeCard from '@/components/SwipeCard';
+import BrandLoader from '@/components/BrandLoader';
 import {
   IconFilm, IconTv, IconSparkles, IconStar, IconUsers, IconTrophy, IconHeart, IconPlay,
   IconClock, IconCheck, IconShare, IconCopy, IconPlus, IconClose, IconChevronLeft, IconArrowRight,
@@ -320,7 +321,7 @@ export default function RoomPage() {
   );
 
   // ═══════════════════════════════════════
-  if (screen === 'loading') return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
+  if (screen === 'loading') return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading room…" /></div></>);
 
   // ── WAITING ──
   if (screen === 'waiting') return (<><CinematicBG variant="charcoal" />
@@ -335,7 +336,7 @@ export default function RoomPage() {
     </div>
   </>);
 
-  if (contentLoading) return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] flex flex-col items-center justify-center gap-4"><div className="spinner" /><p className="text-ink-2 text-sm">Loading content…</p></div></>);
+  if (contentLoading) return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading content…" /></div></>);
 
   // ── ROOM NOT FOUND (invalid or expired link) ──
   if (screen === 'notFound') return (<><CinematicBG variant="content" />
@@ -702,5 +703,5 @@ export default function RoomPage() {
     </div>
   </>);
 
-  return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
+  return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading FlickPick…" /></div></>);
 }

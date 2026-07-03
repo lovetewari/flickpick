@@ -9,22 +9,9 @@ import Dashboard from '@/components/Dashboard';
 import PosterWall from '@/components/PosterWall';
 import Modal from '@/components/Modal';
 import TrendingStrip from '@/components/TrendingStrip';
+import BrandOrbit from '@/components/BrandOrbit';
 import { getTrending } from '@/lib/trending';
-import { IconBrand, BrandLogo, IconFilm, IconTv, IconTicket, IconPlay, IconStar, IconHeart, IconSparkles, IconUsers, IconTrophy, IconArrowRight, IconGoogle } from '@/components/Icons';
-
-// iCloud-style cluster: dark circular badges with colored glyphs, hugging the
-// center circle — some slightly overlapping its ring (z above/below center).
-// a = angle from 12 o'clock cw · rf = ring distance · sf = badge size (× width)
-// Delays start ~1.95s — AFTER the standalone-logo moment (see centerSeq).
-const SATS = [
-  { a: '-48deg',  rf: 0.29, sf: 0.215, z: 3, d: 1.95, fdur: 5.6, glyph: '#ff6a75', Ic: IconFilm },
-  { a: '112deg',  rf: 0.28, sf: 0.19,  z: 4, d: 2.06, fdur: 6.2, glyph: '#ffd66b', Ic: IconStar, filled: true },
-  { a: '-118deg', rf: 0.26, sf: 0.2,   z: 4, d: 2.17, fdur: 5.1, glyph: '#ff8fbf', Ic: IconHeart, filled: true },
-  { a: '12deg',   rf: 0.31, sf: 0.145, z: 2, d: 2.28, fdur: 4.7, glyph: '#5de0e6', Ic: IconSparkles },
-  { a: '58deg',   rf: 0.27, sf: 0.155, z: 2, d: 2.39, fdur: 5.9, glyph: '#4aa3ff', Ic: IconTv },
-  { a: '-84deg',  rf: 0.33, sf: 0.125, z: 2, d: 2.5,  fdur: 4.4, glyph: '#4be08b', Ic: IconPlay, filled: true },
-  { a: '171deg',  rf: 0.25, sf: 0.165, z: 6, d: 2.61, fdur: 5.3, glyph: '#c98bff', Ic: IconTicket },
-];
+import { IconBrand, BrandLogo, IconHeart, IconUsers, IconTrophy, IconArrowRight, IconGoogle } from '@/components/Icons';
 
 const FEATURES = [
   { Ic: IconUsers, glyph: '#4aa3ff', title: 'Host a room', desc: 'Create a room, share one link — friends join from any device in seconds.' },
@@ -104,22 +91,7 @@ export default function Home() {
 
       {/* ── Hero: logo first, then the cluster pops in ── */}
       <section className="relative z-10 min-h-[calc(100dvh-56px)] flex flex-col items-center justify-center px-6 text-center">
-        <div className="hero-cluster">
-          {SATS.map((s, i) => (
-            <div
-              key={i}
-              className="sat"
-              style={{ '--a': s.a, '--rf': s.rf, '--ts': `calc(var(--w) * ${s.sf})`, '--z': s.z, '--d': `${s.d}s`, '--fdur': `${s.fdur}s`, '--fd': `${s.d + 0.64}s` }}
-            >
-              <div className="sat-pop">
-                <div className="sat-float">
-                  <div className="app-tile" style={{ '--glyph': s.glyph }}><s.Ic filled={s.filled} /></div>
-                </div>
-              </div>
-            </div>
-          ))}
-          <div className="hero-center"><IconPlay filled /></div>
-        </div>
+        <BrandOrbit />
 
         <h1 className="hero-title mt-9 rise" style={{ animationDelay: '.38s' }}>FlickPick</h1>
         <button onClick={openStart} className="pill-white mt-7 rise" style={{ animationDelay: '.55s' }}>Get started</button>

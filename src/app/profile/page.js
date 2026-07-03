@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import CinematicBG from '@/components/CinematicBG';
+import BrandLoader from '@/components/BrandLoader';
 import { IconChevronLeft, IconClock, IconHeart, IconHome, IconFilm, IconTv, IconUsers } from '@/components/Icons';
 
 export default function ProfilePage() {
@@ -27,7 +28,7 @@ export default function ProfilePage() {
     })();
   }, [router]);
 
-  if (!user) return (<><CinematicBG variant="content" /><div className="relative z-10 min-h-[100dvh] grid place-items-center"><div className="spinner" /></div></>);
+  if (!user) return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading profile…" /></div></>);
   const matches = history.filter(h => h.was_match);
 
   return (<><CinematicBG variant="content" />
