@@ -46,6 +46,8 @@ export default function RoomPage() {
   const [resultData, setResultData] = useState(null);
   const [showConf, setShowConf] = useState(false);
   const [revealLoading, setRevealLoading] = useState(false);
+  const [startLoading, setStartLoading] = useState(false);
+  const [addFriendLoading, setAddFriendLoading] = useState(false);
 
   useEffect(() => {
     const cats = getCategoriesForType(contentType);
@@ -222,15 +224,22 @@ export default function RoomPage() {
   const shareInvite = async () => { if (navigator.share) try { await navigator.share({ title: 'FlickPick', text: `Join room ${code}`, url: inviteLink }); } catch { copyInvite(); } else copyInvite(); };
 
   const addFriend = async n => {
+    if (addFriendLoading) return;
+    const friendName = n.trim();
+    if (!friendName) return;
+    setAddFriendLoading(true);
     try {
-      const r = await fetch('/api/join-room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, playerName: n }) });
+      const r = await fetch('/api/join-room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, playerName: friendName }) });
       const d = await r.json(); if (d.error) throw new Error(d.error);
       setAddName(''); setShowAdd(false);
     } catch (e) { show(e.message); }
+    setAddFriendLoading(false);
   };
 
   const startSwiping = async () => {
+    if (startLoading) return;
     if (content.length === 0) { show('Load content first'); return; }
+    setStartLoading(true);
     try {
       // Freeze the deck on the room so EVERY player gets this exact deck —
       // rejoins and results reloads read it back instead of rebuilding.
@@ -239,7 +248,10 @@ export default function RoomPage() {
       if (d.error) throw new Error(d.error);
       setMovieIdx(0);
       setScreen('swiping');
-    } catch (e) { show('Could not start: ' + e.message); }
+    } catch (e) {
+      show('Could not start: ' + e.message);
+      setStartLoading(false);
+    }
   };
 
   // Mark this player done — with retries, so the host isn't left waiting on a
@@ -321,7 +333,7 @@ export default function RoomPage() {
   );
 
   // ═══════════════════════════════════════
-  if (screen === 'loading') return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading room…" /></div></>);
+  if (screen === 'loading') return <BrandLoader label="Loading room…" />;
 
   // ── WAITING ──
   if (screen === 'waiting') return (<><CinematicBG variant="charcoal" />
@@ -336,7 +348,7 @@ export default function RoomPage() {
     </div>
   </>);
 
-  if (contentLoading) return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading content…" /></div></>);
+  if (contentLoading) return <BrandLoader label="Loading content…" />;
 
   // ── ROOM NOT FOUND (invalid or expired link) ──
   if (screen === 'notFound') return (<><CinematicBG variant="content" />
@@ -402,7 +414,7 @@ export default function RoomPage() {
                 </div>
               ))}</div>
               {showAdd
-                ? <div className="flex gap-2 mt-3"><input autoFocus value={addName} onChange={e => setAddName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addName && addFriend(addName)} placeholder="Friend's name" className="field !h-11 flex-1" /><button onClick={() => addName && addFriend(addName)} className="btn btn-primary btn-sm !w-auto">Add</button><button onClick={() => { setShowAdd(false); setAddName(''); }} className="btn btn-secondary btn-sm !w-auto !px-2.5"><IconClose size={16} /></button></div>
+                ? <div className="flex gap-2 mt-3"><input autoFocus value={addName} onChange={e => setAddName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addName.trim() && addFriend(addName)} placeholder="Friend's name" className="field !h-11 flex-1" /><button onClick={() => addName.trim() && addFriend(addName)} disabled={!addName.trim() || addFriendLoading} aria-busy={addFriendLoading} className="btn btn-primary btn-sm !w-auto">{addFriendLoading ? 'Adding…' : 'Add'}</button><button onClick={() => { setShowAdd(false); setAddName(''); }} disabled={addFriendLoading} className="btn btn-secondary btn-sm !w-auto !px-2.5"><IconClose size={16} /></button></div>
                 : <button onClick={() => setShowAdd(true)} className="btn btn-secondary btn-sm btn-block mt-3"><IconPlus size={16} />Add friend</button>
               }
             </div>
@@ -529,8 +541,8 @@ export default function RoomPage() {
       <div className="sticky bottom-0 z-20 pt-2 safe-b">
         <div className="max-w-content mx-auto px-5 pb-5">
           <div className="glass p-3 rounded-2xl">
-            <button onClick={startSwiping} disabled={!canStart} className="btn btn-primary btn-block btn-lg">
-              <IconPlay size={18} />{contentType === 'movies' ? `Start swiping · ${movieCount} movies` : contentType === 'series' ? `Start swiping · ${seriesCount} series` : `Start swiping · ${content.length} titles`}
+            <button onClick={startSwiping} disabled={!canStart || startLoading} aria-busy={startLoading} className="btn btn-primary btn-block btn-lg">
+              {startLoading ? <><span className="spinner !w-5 !h-5 !border-2 !border-white/40 !border-t-white" />Starting…</> : <><IconPlay size={18} />{contentType === 'movies' ? `Start swiping · ${movieCount} movies` : contentType === 'series' ? `Start swiping · ${seriesCount} series` : `Start swiping · ${content.length} titles`}</>}
             </button>
             {!canStart && <p className="text-ink-3 text-[11px] text-center mt-2">{platforms.length === 0 ? 'Select at least one platform' : players.length < 2 ? 'Add at least 2 players' : !contentLoaded ? 'Load content first' : ''}</p>}
           </div>
@@ -574,7 +586,7 @@ export default function RoomPage() {
         <div className="flex justify-center gap-3 mb-8 flex-wrap">{players.map(p => (
           <div key={p.id} className="flex flex-col items-center gap-1.5"><Avatar p={p} size={44} ring="var(--success)" /><span className="text-white/50 text-[10px] font-semibold">{p.name.slice(0, 8)}</span></div>
         ))}</div>
-        <button onClick={revealResults} disabled={revealLoading} className="btn btn-primary btn-lg btn-block" style={{ animation: revealLoading ? 'none' : 'pulsering 2s ease-in-out infinite' }}>{revealLoading ? 'Calculating…' : <><IconTrophy size={19} />Reveal results</>}</button>
+        <button onClick={revealResults} disabled={revealLoading} aria-busy={revealLoading} className="btn btn-primary btn-lg btn-block" style={{ animation: revealLoading ? 'none' : 'pulsering 2s ease-in-out infinite' }}>{revealLoading ? 'Calculating…' : <><IconTrophy size={19} />Reveal results</>}</button>
       </>) : (<>
         <div className="app-badge floaty mb-6"><IconCheck size={42} /></div>
         <h2 className="text-[30px] font-bold text-white mb-2">You're done!</h2>
@@ -703,5 +715,5 @@ export default function RoomPage() {
     </div>
   </>);
 
-  return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading FlickPick…" /></div></>);
+  return <BrandLoader label="Loading FlickPick…" />;
 }

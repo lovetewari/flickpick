@@ -21,6 +21,7 @@ export default function JoinPage() {
   const show = m => { setToast({ msg: m, v: true }); setTimeout(() => setToast(t => ({ ...t, v: false })), 2500); };
 
   useEffect(() => {
+    router.prefetch(`/room/${code}`); // warm the room so "Join" is instant
     const savedCode = localStorage.getItem('fp_room_code');
     const savedSession = localStorage.getItem('fp_session');
     if (savedCode === code.toUpperCase() && savedSession) {
@@ -60,12 +61,11 @@ export default function JoinPage() {
       router.push(`/room/${d.room.code}`);
     } catch (e) {
       show(e.message);
-    } finally {
       setLoading(false);
     }
   };
 
-  if (redirecting) return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Taking you to the room…" /></div></>);
+  if (redirecting) return <BrandLoader label="Taking you to the room…" />;
 
   if (notFound) return (<><CinematicBG variant="content" />
     <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5">
@@ -93,7 +93,7 @@ export default function JoinPage() {
           </div>
           <label className="label !text-white/45" htmlFor="joinName">Your name</label>
           <input id="joinName" autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && !loading && join()} placeholder="Enter your name" className="field-on-dark mb-5" autoComplete="name" />
-          <button onClick={join} disabled={loading} className="btn btn-primary btn-block btn-lg">{loading ? <><span className="spinner !w-5 !h-5 !border-2 !border-white/40 !border-t-white" />Joining…</> : <>Join room <IconArrowRight size={18} /></>}</button>
+          <button onClick={join} disabled={loading} aria-busy={loading} className="btn btn-primary btn-block btn-lg">{loading ? <><span className="spinner !w-5 !h-5 !border-2 !border-white/40 !border-t-white" />Joining…</> : <>Join room <IconArrowRight size={18} /></>}</button>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import CinematicBG from '@/components/CinematicBG';
+import BrandLoader from '@/components/BrandLoader';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function AuthCallback() {
 
     const params = new URLSearchParams(window.location.search);
     // Provider denied / errored (user cancelled, etc.)
-    if (params.get('error')) { router.replace('/login?error=oauth'); return; }
+    if (params.get('error')) { window.location.replace('/login?error=oauth'); return; }
 
     // 1) Session may already exist (detectSessionInUrl ran on client init)
     supabase.auth.getSession().then(({ data }) => { if (data?.session) finish('/app'); });
@@ -49,20 +50,15 @@ export default function AuthCallback() {
     return () => { sub.subscription.unsubscribe(); clearTimeout(t); };
   }, [router]);
 
+  if (!failed) return <BrandLoader label="Signing you in…" />;
+
   return (<><CinematicBG variant="hero" posters={[]} />
     <div className="relative z-10 min-h-[100dvh] grid place-items-center px-5 text-center">
-      {failed ? (
-        <div className="glass-dark p-7 max-w-[360px] w-full rise">
-          <h1 className="text-white text-[19px] font-bold mb-1.5">Sign-in didn't complete</h1>
-          <p className="text-white/55 text-[13.5px] mb-5">The link may have expired. Please try again.</p>
-          <button onClick={() => router.replace('/login')} className="btn btn-primary btn-block">Back to sign in</button>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-4">
-          <div className="spinner" />
-          <p className="text-white/60 text-sm">Signing you in…</p>
-        </div>
-      )}
+      <div className="glass-dark p-7 max-w-[360px] w-full rise">
+        <h1 className="text-white text-[19px] font-bold mb-1.5">Sign-in didn't complete</h1>
+        <p className="text-white/55 text-[13.5px] mb-5">The link may have expired. Please try again.</p>
+        <button onClick={() => window.location.replace('/login')} className="btn btn-primary btn-block">Back to sign in</button>
+      </div>
     </div>
   </>);
 }

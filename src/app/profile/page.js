@@ -13,8 +13,11 @@ export default function ProfilePage() {
   const [history, setHistory] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [tab, setTab] = useState('history');
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
+    router.prefetch('/'); // "back" destination
+    router.prefetch('/app');
     (async () => {
       const { data: { user: u } } = await supabase.auth.getUser();
       if (!u) { router.push('/login'); return; }
@@ -28,7 +31,7 @@ export default function ProfilePage() {
     })();
   }, [router]);
 
-  if (!user) return (<><CinematicBG variant="content" /><div className="relative z-10"><BrandLoader label="Loading profile…" /></div></>);
+  if (!user) return <BrandLoader label="Loading profile…" />;
   const matches = history.filter(h => h.was_match);
 
   return (<><CinematicBG variant="content" />
@@ -37,7 +40,7 @@ export default function ProfilePage() {
         <div className="max-w-[760px] mx-auto px-5 h-16 flex items-center justify-between">
           <button onClick={() => router.push('/')} className="btn btn-secondary btn-sm !w-auto !px-2.5" aria-label="Back"><IconChevronLeft size={18} /></button>
           <h2 className="text-[16px] font-semibold text-ink">Profile</h2>
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="btn btn-danger btn-sm !w-auto">Sign out</button>
+          <button onClick={async () => { setSigningOut(true); await supabase.auth.signOut(); router.push('/login'); }} disabled={signingOut} aria-busy={signingOut} className="btn btn-danger btn-sm !w-auto">{signingOut ? 'Signing out…' : 'Sign out'}</button>
         </div>
       </header>
 

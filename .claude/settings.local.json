@@ -50,7 +50,9 @@
       "Bash(sed -i '' 's/node-version: 20, cache: npm/node-version: 22, cache: npm/g' .github/workflows/ci.yml)",
       "Bash(sed -i '' 's/node-version: 20$/node-version: 22/' .github/workflows/refresh-catalog.yml)",
       "Bash(pkill -f \"next dev\")",
-      "Bash(xargs kill -9)"
+      "Bash(xargs kill -9)",
+      "Bash(perl -0pi -e 's/\\\\.loader-orbit \\\\{\\\\n  --w: min\\\\\\(178px, 54vw\\\\\\);\\\\n\\\\}/.loader-orbit {\\\\n  --w: min\\(214px, 62vw\\);\\\\n}/' src/app/globals.css)",
+      "Bash(perl -0pi -e 's/  \\\\.loader-orbit \\\\{\\\\n    --w: min\\\\\\(158px, 58vw\\\\\\);\\\\n  \\\\}/  .loader-orbit {\\\\n    --w: min\\(190px, 66vw\\);\\\\n  }/' src/app/globals.css)"
     ]
   }
 }

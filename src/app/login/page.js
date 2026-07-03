@@ -10,12 +10,14 @@ import { getTrending } from '@/lib/trending';
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [err, setErr] = useState('');
   const [posters, setPosters] = useState([]);
 
   useEffect(() => {
     getTrending().then(d => { if (d.posters.length) setPosters(d.posters); }).catch(() => {});
-  }, []);
+    router.prefetch('/app'); // guest / post-sign-in destination — warm it
+  }, [router]);
 
   const googleLogin = async () => {
     if (!backendReady) { setErr('Sign-in needs a Supabase backend. Add your keys to .env.local (see /api/health), then restart.'); return; }
@@ -30,6 +32,7 @@ export default function LoginPage() {
 
   // Guest → set the explicit flag and enter the app (NOT back to the landing)
   const continueAsGuest = () => {
+    setGuestLoading(true);
     localStorage.setItem('fp_guest', '1');
     router.push('/app');
   };
@@ -48,7 +51,7 @@ export default function LoginPage() {
               <strong className="font-semibold">Backend not configured.</strong> Google sign-in needs your Supabase keys in <code>.env.local</code>. Open <code>/api/health</code> to see what's missing — you can still continue as a guest.
             </div>
           )}
-          <button onClick={googleLogin} disabled={loading || !backendReady} className="btn btn-block btn-lg" style={{ background: '#fff', color: '#1d1d1f' }}>
+          <button onClick={googleLogin} disabled={loading || guestLoading || !backendReady} aria-busy={loading} className="btn btn-block btn-lg" style={{ background: '#fff', color: '#1d1d1f' }}>
             <IconGoogle size={20} />
             {loading ? 'Connecting…' : 'Continue with Google'}
           </button>
@@ -58,7 +61,7 @@ export default function LoginPage() {
             <span className="text-white/35 text-xs font-semibold">OR</span>
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,.14)' }} />
           </div>
-          <button onClick={continueAsGuest} className="btn btn-block btn-lg" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', border: '0.5px solid rgba(255,255,255,.16)' }}>Continue as guest <IconArrowRight size={18} /></button>
+          <button onClick={continueAsGuest} disabled={guestLoading || loading} aria-busy={guestLoading} className="btn btn-block btn-lg" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', border: '0.5px solid rgba(255,255,255,.16)' }}>{guestLoading ? 'Opening…' : <>Continue as guest <IconArrowRight size={18} /></>}</button>
         </div>
       </div>
     </div>

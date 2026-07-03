@@ -246,8 +246,8 @@ header {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.2s ease,
-    box-shadow 0.2s ease, opacity 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
+  transition: transform 0.09s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.12s ease,
+    box-shadow 0.12s ease, opacity 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
 }
 .btn:active:not(:disabled) {
   transform: scale(0.975);
@@ -255,6 +255,10 @@ header {
 .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.btn[aria-busy='true'] {
+  opacity: 1;
+  cursor: progress;
 }
 .btn:focus-visible {
   outline: none;
@@ -666,9 +670,9 @@ header {
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
-  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease;
-  animation: trendCardIn 0.48s cubic-bezier(0.18, 0.86, 0.24, 1.08) backwards;
-  animation-delay: calc(var(--rank-index, 0) * 45ms);
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 0.18s ease;
+  animation: trendCardIn 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) backwards;
+  animation-delay: calc(var(--rank-index, 0) * 38ms);
 }
 .trend-card:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.8);
@@ -681,11 +685,79 @@ header {
   transform: translateY(-1px) scale(0.99);
 }
 .platform-logo {
-  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 0.18s ease;
 }
 .platform-logo:hover {
   transform: translateY(-3px) scale(1.08);
   box-shadow: 0 10px 26px -8px rgba(0, 0, 0, 0.7);
+}
+.platform-mark {
+  width: 44px;
+  height: 44px;
+  display: block;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.85);
+}
+.platform-mark-fallback,
+.platform-mark-imax {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.platform-mark-imax {
+  width: auto;
+  min-width: 54px;
+  padding: 0 11px;
+  background: #0a3d91;
+  font-size: 15px;
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+
+/* ── Snappy tap/click response ──
+   touch-action: manipulation removes the ~300ms double-tap delay some mobile
+   browsers add. No blanket will-change (promoting dozens of buttons/chips to
+   GPU layers actually *slows* interaction) — layers are created on demand. */
+button,
+a,
+[role='button'],
+.btn,
+.chip,
+.dash-app,
+.pill-white,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+button:not(:disabled),
+a[href],
+[role='button'] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+button:not(:disabled):active,
+a[href]:active,
+[role='button']:active {
+  transition-duration: 80ms;
+}
+.dash-app:active .dash-tile {
+  transform: translateY(-1px) scale(0.96);
+  transition: transform 0.09s ease;
+}
+.chip:active:not([data-active='true']) {
+  transform: scale(0.95);
 }
 .trending-rail {
   overflow-x: auto;
@@ -1013,7 +1085,6 @@ header {
   display: flex;
   gap: 16px;
   justify-content: center;
-  filter: brightness(0.5) saturate(0.95);
   opacity: 0;
   /* fades in as the logo settles into the cluster */
   animation: postersIn 1.8s ease 1.55s forwards;
@@ -1074,18 +1145,28 @@ div.pframe::after {
 .login-orbit {
   --w: min(245px, 70vw);
 }
-.loader-orbit {
-  --w: min(178px, 54vw);
+.brand-loader-orbit {
+  --w: min(300px, 74vw);
 }
 .brand-loader {
-  display: flex;
+  position: relative;
   min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+  isolation: isolate;
+  text-align: center;
+  background: #1a1a1c;
+}
+.brand-loader-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 14px;
-  padding: 24px;
-  text-align: center;
 }
 .brand-loader-label {
   color: rgba(255, 255, 255, 0.58);
@@ -1424,7 +1505,11 @@ div.pframe::after {
   position: fixed;
   inset: 0;
   z-index: 0;
+  overflow: hidden;
   pointer-events: none;
+}
+.app-bg-hero {
+  background: radial-gradient(72% 44% at 50% 26%, #292a2f 0%, transparent 72%), #1a1a1c;
 }
 .app-bg-charcoal {
   background: radial-gradient(72% 44% at 50% 16%, #26262b 0%, transparent 70%), #1a1a1c;
@@ -1439,8 +1524,8 @@ div.pframe::after {
   .login-orbit {
     --w: min(220px, 76vw);
   }
-  .loader-orbit {
-    --w: min(158px, 58vw);
+  .brand-loader-orbit {
+    --w: min(230px, 76vw);
   }
   .dashboard-brand-logo {
     width: 32px;

@@ -17,7 +17,7 @@ export default function BrandOrbit({ className = '' }) {
         <div
           key={i}
           className="sat"
-          style={{ '--a': s.a, '--rf': s.rf, '--ts': `calc(var(--w) * ${s.sf})`, '--z': s.z, '--d': `${s.d}s`, '--fdur': `${s.fdur}s`, '--fd': `${s.d + 0.64}s` }}
+          style={{ '--a': s.a, '--rf': s.rf, '--ts': `calc(var(--w) * ${s.sf})`, '--z': s.z, '--d': `${s.d}s`, '--fdur': `${s.fdur}s`, '--fd': `${s.d + 0.64}s`, '--li': i }}
         >
           <div className="sat-pop">
             <div className="sat-float">

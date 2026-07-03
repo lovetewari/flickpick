@@ -32,7 +32,10 @@ export default function Dashboard({ profile, userId }) {
 
   useEffect(() => {
     getTrending().then(d => { if (d.posters.length) setPosters(d.posters); }).catch(() => {});
-  }, []);
+    // Warm the tile destinations so taps navigate instantly
+    router.prefetch('/profile');
+    router.prefetch('/login');
+  }, [router]);
   const [toast, setToast] = useState({ msg: '', v: false });
   const show = m => { setToast({ msg: m, v: true }); setTimeout(() => setToast(t => ({ ...t, v: false })), 2500); };
 
@@ -93,6 +96,7 @@ export default function Dashboard({ profile, userId }) {
     setSignInReason(reason);
     setSignInOpen(true);
   };
+  const goToLogin = () => window.location.assign('/login');
   const signInCopy = signInReason === 'sync'
     ? {
         label: 'Sign in to sync',
@@ -129,7 +133,7 @@ export default function Dashboard({ profile, userId }) {
           ) : (
             <div className="flex items-center gap-3">
               <span className="text-white/45 text-[12px] font-semibold rounded-full px-2.5 py-1" style={{ background: 'rgba(255,255,255,.08)' }}>Guest</span>
-              <button onClick={() => router.push('/login')} className="text-white/80 hover:text-white text-[14px] font-medium transition">Sign in</button>
+              <button onClick={goToLogin} className="text-white/80 hover:text-white text-[14px] font-medium transition">Sign in</button>
             </div>
           )}
         </div>
@@ -206,7 +210,7 @@ export default function Dashboard({ profile, userId }) {
             </div>
             <label className="label !text-white/45" htmlFor="hostName">Your name</label>
             <input id="hostName" autoFocus value={hostName} onChange={e => setHostName(e.target.value)} onKeyDown={e => e.key === 'Enter' && hostName.trim() && host(hostName.trim())} placeholder="Enter your name" className="field-on-dark mb-4" autoComplete="name" />
-            <button onClick={() => hostName.trim() && host(hostName.trim())} disabled={loading === 'host' || !hostName.trim()} className="btn btn-primary btn-block btn-lg">
+            <button onClick={() => hostName.trim() && host(hostName.trim())} disabled={loading === 'host' || !hostName.trim()} aria-busy={loading === 'host'} className="btn btn-primary btn-block btn-lg">
               {loading === 'host' ? 'Creating…' : <>Create room <IconArrowRight size={18} /></>}
             </button>
           </div>
@@ -220,7 +224,7 @@ export default function Dashboard({ profile, userId }) {
           <button onClick={() => setSignInOpen(false)} aria-label="Close" className="text-white/60 hover:text-white p-1 -m-1"><IconClose size={18} /></button>
         </div>
         <p className="text-white/55 text-[13.5px] leading-relaxed mb-5">{signInCopy.body}</p>
-        <button onClick={() => router.push('/login')} className="btn btn-primary btn-block btn-lg mb-2">Sign in <IconArrowRight size={17} /></button>
+        <button onClick={goToLogin} className="btn btn-primary btn-block btn-lg mb-2">Sign in <IconArrowRight size={17} /></button>
         <button onClick={() => setSignInOpen(false)} className="btn btn-ghost btn-sm btn-block">Maybe later</button>
       </Modal>
 
@@ -233,7 +237,7 @@ export default function Dashboard({ profile, userId }) {
               <button onClick={() => setJoinOpen(false)} className="text-white/60 hover:text-white"><IconClose size={18} /></button>
             </div>
             <input autoFocus value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && doJoin()} placeholder="ABC123" maxLength={6} autoCapitalize="characters" className="field-on-dark mb-4 text-center !text-[22px] font-bold tracking-[8px]" style={{ fontFamily: 'var(--font-display)' }} />
-            <button onClick={doJoin} disabled={loading === 'join'} className="btn btn-primary btn-block btn-lg">{loading === 'join' ? 'Joining…' : <>Join room <IconArrowRight size={18} /></>}</button>
+            <button onClick={doJoin} disabled={loading === 'join'} aria-busy={loading === 'join'} className="btn btn-primary btn-block btn-lg">{loading === 'join' ? 'Joining…' : <>Join room <IconArrowRight size={18} /></>}</button>
           </div>
         </div>
       )}

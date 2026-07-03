@@ -37,11 +37,7 @@ export default function AppHome() {
     })();
   }, [router]);
 
-  if (!ready) return (
-    <div className="dash">
-      <div className="relative z-10"><BrandLoader label="Opening FlickPick…" /></div>
-    </div>
-  );
+  if (!ready) return <BrandLoader label="Opening FlickPick…" />;
 
   return <Dashboard profile={profile} userId={user?.id} />;
 }
