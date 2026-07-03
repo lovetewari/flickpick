@@ -526,7 +526,7 @@ export default function RoomPage() {
       </main>
 
       {/* Sticky start bar */}
-      <div className="sticky bottom-0 z-20 pt-2">
+      <div className="sticky bottom-0 z-20 pt-2 safe-b">
         <div className="max-w-content mx-auto px-5 pb-5">
           <div className="glass p-3 rounded-2xl">
             <button onClick={startSwiping} disabled={!canStart} className="btn btn-primary btn-block btn-lg">
@@ -542,7 +542,7 @@ export default function RoomPage() {
 
   // ── SWIPING ──
   if (screen === 'swiping') return (<><CinematicBG variant="content" />
-    <div className="relative z-10 min-h-[100dvh] flex flex-col items-center px-4 py-4 max-w-[460px] mx-auto w-full">
+    <div className="relative z-10 min-h-[100dvh] flex flex-col items-center px-4 py-4 max-w-[460px] mx-auto w-full safe-t safe-x">
       <div className="w-full flex items-center justify-between mb-2 fade">
         <div className="flex items-center gap-2.5">
           {myPlayer && <>
@@ -597,7 +597,7 @@ export default function RoomPage() {
         <div key={`${ci}-${i}`} className="absolute" style={{ width: 6 + i * 2, height: 6 + i * 2, background: c, borderRadius: i % 2 ? '50%' : '2px', left: `${(ci * 8 + i * 15) % 100}%`, top: -20, animation: `confetti ${2 + i * 0.5}s ease-in forwards`, animationDelay: `${ci * 0.15 + i * 0.2}s`, opacity: 0.85 }} />
       )))}</div>}
 
-      <div className="relative z-10 min-h-[100dvh] max-w-content mx-auto px-5 py-6 pb-16 rise">
+      <div className="relative z-10 min-h-[100dvh] max-w-content mx-auto px-5 py-6 pb-16 rise safe-t safe-x">
         <div className="text-center mb-6">
           <span className="app-badge mx-auto mb-4"><IconTrophy size={40} /></span>
           <h2 className="wordmark text-[34px] text-ink">Results</h2>

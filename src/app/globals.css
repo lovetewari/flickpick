@@ -168,6 +168,26 @@ img {
   border-bottom: 0.5px solid var(--border);
 }
 
+/* ── Device safe areas (viewport-fit=cover renders edge-to-edge) ──
+   Keep every page header clear of the notch / status bar, and any
+   bottom-pinned bar clear of the home indicator — on all mobile screens. */
+header {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+/* Top-anchored screens without a header (swipe deck, results) */
+.safe-t {
+  padding-top: max(env(safe-area-inset-top, 0px), 1.25rem);
+}
+.safe-b {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+}
+.safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
 /* ── Brand gradient (logo surfaces) ── */
 :root {
   --brand-grad: linear-gradient(150deg, #ff9f0a 0%, #ff375f 52%, #bf5af2 100%);

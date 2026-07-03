@@ -110,8 +110,12 @@ test.describe('app dashboard', () => {
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).not.toBeVisible();
-    // Sign in redirect works
+  });
+
+  test('the sign-in-required modal redirects a guest to /login', async ({ page }) => {
     await page.getByRole('button', { name: /Profile/ }).click({ force: true });
+    const dialog = page.getByRole('dialog', { name: 'Sign in required' });
+    await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: /^Sign in$/ }).click();
     await expect(page).toHaveURL(/\/login/);
   });
