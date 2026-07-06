@@ -121,7 +121,7 @@ export default function TrendingStrip({ state, items, onRetry }) {
       )}
 
       {state === 'ready' && (
-        <div className="trending-rail -mx-6 px-6" data-animate={items.length > 4 ? 'true' : 'false'}>
+        <div className="trending-rail -mx-6 px-6">
           <div className="trending-track">
           {items.map((it, i) => (
             <Card key={`${it.type}-${it.id}`}>

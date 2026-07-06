@@ -60,7 +60,12 @@
       "Bash(pkill -f \"next start\")",
       "Bash(curl -s -X POST http://localhost:3000/api/create-room -H 'Content-Type: application/json' -d '{\"hostName\":\"Preview Host\"}')",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('room',{}\\).get\\('code'\\), d.get\\('sessionToken'\\)\\)\")",
-      "Bash(lsof -ti:3100)"
+      "Bash(lsof -ti:3100)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(cat > *)",
+      "Bash(awk '/@media.*\\\\\\(max-width.*640px\\\\\\)|@media.*\\\\\\(max-width.*639px\\\\\\)|@media.*sm:/{found=1} found{print NR\": \"$0; if\\(/^}/\\) {found=0}}' /Users/lovetewari/flickpick/src/app/globals.css)",
+      "Bash(awk 'NR>=1550 && NR<=1660 {print NR\": \"$0}' /Users/lovetewari/flickpick/src/app/globals.css)"
     ]
   }
 }

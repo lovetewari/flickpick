@@ -26,7 +26,10 @@ test.describe('trending section', () => {
     await expect(page.getByLabel('Rank 1')).toBeVisible();
     await expect(page.getByLabel('Rank 2')).toBeVisible();
     await expect(page.getByLabel('Rank 3')).toBeVisible();
-    await expect(page.locator('.trending-track')).toHaveCSS('animation-name', 'trendingDrift');
+    // Perf invariant: the track must NOT auto-animate — the old trendingDrift
+    // marquee fought scroll-snap and janked scrolling on every device.
+    await expect(page.locator('.trending-track')).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('.trending-rail')).toHaveCSS('scroll-snap-type', /proximity|^x$/);
 
     await page.getByRole('button', { name: 'Open options for The Matrix', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Open The Matrix' })).toBeVisible();

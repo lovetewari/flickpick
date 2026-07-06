@@ -750,7 +750,8 @@ header {
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
-  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 0.18s ease;
+  /* transform only — transitioning box-shadow forces repaints mid-scroll */
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
   animation: trendCardIn 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) backwards;
   animation-delay: calc(var(--rank-index, 0) * 38ms);
 }
@@ -843,7 +844,9 @@ a[href]:active,
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 10px;
-  scroll-snap-type: x mandatory;
+  /* proximity, not mandatory: mandatory snap makes wheel/flick scrolling feel
+     sticky, and combined with the old auto-drift it fought every gesture */
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
 }
 .trending-rail::-webkit-scrollbar {
@@ -853,14 +856,6 @@ a[href]:active,
   width: max-content;
   display: flex;
   gap: 14px;
-  will-change: transform;
-}
-.trending-rail[data-animate='true'] .trending-track {
-  animation: trendingDrift 6.5s ease-in-out 1.2s infinite;
-}
-.trending-rail:hover .trending-track,
-.trending-rail:focus-within .trending-track {
-  animation-play-state: paused;
 }
 .trend-card-shell {
   flex: 0 0 auto;
@@ -892,9 +887,29 @@ a[href]:active,
 .rank-badge-top {
   background: linear-gradient(145deg, #ffb047, #ff375f 58%, #bf5af2);
   border-color: rgba(255, 255, 255, 0.34);
-  animation: rankPop 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) both,
-    rankPulse 2.8s ease-in-out 1.2s infinite;
-  animation-delay: calc(120ms + var(--rank-index, 0) * 45ms), calc(1s + var(--rank-index, 0) * 120ms);
+  animation: rankPop 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) both;
+  animation-delay: calc(120ms + var(--rank-index, 0) * 45ms);
+}
+/* Pulse the #1 badge glow via pseudo-element OPACITY (composite-only) —
+   the old box-shadow keyframes repainted the card every frame, forever. */
+.rank-badge-top::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  box-shadow: 0 10px 24px -8px rgba(255, 55, 95, 0.72);
+  opacity: 0;
+  z-index: -1;
+  animation: rankGlow 2.8s ease-in-out 1.2s infinite;
+}
+@keyframes rankGlow {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 .provider-stack {
   position: absolute;
@@ -940,15 +955,6 @@ a[href]:active,
 .provider-more {
   background: rgba(7, 7, 10, 0.72);
 }
-@keyframes trendingDrift {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(clamp(-34px, -3vw, -18px));
-  }
-}
 @keyframes trendCardIn {
   from {
     opacity: 0;
@@ -967,15 +973,6 @@ a[href]:active,
   to {
     opacity: 1;
     transform: none;
-  }
-}
-@keyframes rankPulse {
-  0%,
-  100% {
-    box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.8);
-  }
-  50% {
-    box-shadow: 0 10px 24px -8px rgba(255, 55, 95, 0.72);
   }
 }
 
@@ -1110,6 +1107,16 @@ a[href]:active,
   background: rgba(255, 255, 255, 0.12);
   box-shadow: 0 0 0 4px rgba(255, 55, 95, 0.28);
 }
+/* Accessibility + battery: kill decorative loops for reduced-motion users */
+@media (prefers-reduced-motion: reduce) {
+  .pcol,
+  .sat-float,
+  .rank-badge-top::after,
+  div.pframe::after,
+  .trend-card {
+    animation: none !important;
+  }
+}
 @keyframes scrollUp {
   from {
     transform: translateY(0);
@@ -1191,13 +1198,34 @@ div.pframe {
   position: relative;
   overflow: hidden;
 }
+/* The sweep slides via TRANSFORM (compositor-only). Animating
+   background-position here painted 96 pseudo-elements every frame and forced
+   the poster columns to re-rasterize — the single biggest landing jank. */
 div.pframe::after {
   content: '';
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: -100%;
+  width: 300%;
   background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.05) 48%, rgba(255, 255, 255, 0.09) 52%, rgba(255, 255, 255, 0.05) 56%, transparent 74%);
-  background-size: 300% 100%;
-  animation: shimmer 3.6s ease-in-out infinite;
+  animation: shimmerSlide 3.6s ease-in-out infinite;
+}
+@keyframes shimmerSlide {
+  0% {
+    transform: translateX(33.4%);
+  }
+  100% {
+    transform: translateX(-33.4%);
+  }
+}
+/* Offscreen hero → the whole wall (columns + sweeps) stops costing frames.
+   !important is required: the column animation is set inline by PosterWall. */
+.pwall[data-paused='true'] .pcol {
+  animation-play-state: paused !important;
+}
+.pwall[data-paused='true'] div.pframe::after {
+  animation-play-state: paused;
 }
 .landing-scrim {
   position: absolute;

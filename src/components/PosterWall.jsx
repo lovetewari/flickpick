@@ -3,13 +3,32 @@
 // Columns alternate direction, run at different speeds, and start mid-cycle
 // (negative delays) so the drift is visibly alive from the first frame.
 // Renders styled placeholder frames until (or if) real posters load.
+//
+// The 8 columns are large composited layers animating forever — they must
+// PAUSE once the hero scrolls offscreen, or they keep taxing the GPU under
+// the rest of the page (the trending strip visibly janked from this).
+import { useEffect, useRef, useState } from 'react';
+
 const COLS = 8;
 const PER_COL = 6;
 
 export default function PosterWall({ posters = [] }) {
   const has = posters.length > 0;
+  const ref = useRef(null);
+  const [onScreen, setOnScreen] = useState(true);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting), { rootMargin: '80px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <div className="pwall" aria-hidden="true">
+    // data-paused freezes columns AND placeholder sweeps via CSS when the
+    // hero scrolls offscreen — see .pwall[data-paused] rules in globals.css.
+    <div ref={ref} className="pwall" data-paused={onScreen ? 'false' : 'true'} aria-hidden="true">
       {Array.from({ length: COLS }, (_, c) => {
         const items = Array.from({ length: PER_COL }, (_, r) =>
           has ? posters[(c * PER_COL + r) % posters.length] : null
