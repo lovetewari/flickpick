@@ -52,7 +52,15 @@
       "Bash(pkill -f \"next dev\")",
       "Bash(xargs kill -9)",
       "Bash(perl -0pi -e 's/\\\\.loader-orbit \\\\{\\\\n  --w: min\\\\\\(178px, 54vw\\\\\\);\\\\n\\\\}/.loader-orbit {\\\\n  --w: min\\(214px, 62vw\\);\\\\n}/' src/app/globals.css)",
-      "Bash(perl -0pi -e 's/  \\\\.loader-orbit \\\\{\\\\n    --w: min\\\\\\(158px, 58vw\\\\\\);\\\\n  \\\\}/  .loader-orbit {\\\\n    --w: min\\(190px, 66vw\\);\\\\n  }/' src/app/globals.css)"
+      "Bash(perl -0pi -e 's/  \\\\.loader-orbit \\\\{\\\\n    --w: min\\\\\\(158px, 58vw\\\\\\);\\\\n  \\\\}/  .loader-orbit {\\\\n    --w: min\\(190px, 66vw\\);\\\\n  }/' src/app/globals.css)",
+      "Bash(gh auth *)",
+      "Bash(npm test *)",
+      "Bash(npx next *)",
+      "Bash(lsof -ti:3100,3987)",
+      "Bash(pkill -f \"next start\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/create-room -H 'Content-Type: application/json' -d '{\"hostName\":\"Preview Host\"}')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('room',{}\\).get\\('code'\\), d.get\\('sessionToken'\\)\\)\")",
+      "Bash(lsof -ti:3100)"
     ]
   }
 }

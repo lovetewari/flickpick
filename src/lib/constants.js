@@ -64,7 +64,7 @@ const PROVIDER_ALIAS = {
   'Amazon Prime Video': 'Prime Video', 'Amazon Video': 'Prime Video',
   'Disney Plus': 'Disney+', 'Disney+ Hotstar': 'Hotstar', 'JioHotstar': 'Hotstar',
   'Apple TV Plus': 'Apple TV+', 'Apple TV': 'Apple TV+',
-  'HBO Max': 'Max',
+  'HBO Max': 'Max', 'Zee5': 'ZEE5', 'Sony Liv': 'SonyLIV',
 };
 export function normProvider(name) {
   let n = String(name || '').trim()
@@ -72,6 +72,30 @@ export function normProvider(name) {
     .replace(/\s+(basic\s+)?with\s+ads$/i, '')                    // ad tiers → base brand
     .replace(/\s+(standard|premium)$/i, '');                      // plan tiers → base brand
   return PROVIDER_ALIAS[n] || n;
+}
+
+// The catalog stores provider names as TMDB sends them (variants included),
+// so a filter for the canonical brand must match every stored spelling.
+const PROVIDER_VARIANTS = {
+  'Netflix': ['Netflix', 'Netflix basic with Ads', 'Netflix Standard with Ads'],
+  'Prime Video': ['Prime Video', 'Amazon Prime Video', 'Amazon Video', 'Amazon Prime Video with Ads'],
+  'Hotstar': ['Hotstar', 'Disney+ Hotstar', 'JioHotstar'],
+  'Disney+': ['Disney+', 'Disney Plus'],
+  'Apple TV+': ['Apple TV+', 'Apple TV Plus', 'Apple TV', 'Apple TV Plus Amazon Channel'],
+  'Max': ['Max', 'HBO Max'],
+  'Crunchyroll': ['Crunchyroll', 'Crunchyroll Amazon Channel'],
+  'ZEE5': ['ZEE5', 'Zee5'],
+  'SonyLIV': ['SonyLIV', 'Sony Liv'],
+};
+export function expandPlatforms(platforms = []) {
+  const out = new Set();
+  for (const p of platforms) {
+    const canonical = normProvider(p);
+    out.add(p);
+    out.add(canonical);
+    for (const v of PROVIDER_VARIANTS[canonical] || []) out.add(v);
+  }
+  return [...out];
 }
 // Brand gradient for a provider chip (falls back to a neutral slate).
 export function ottBg(name) {
@@ -87,6 +111,11 @@ export function isValidLogoUrl(u) {
 
 // ═══ Genres ═══
 export const GENRES = ['All','Action','Comedy','Drama','Sci-Fi','Horror','Animation','Romance','Thriller','History','Fantasy','Mystery','Adventure','Crime','Documentary'];
+
+// TMDB's TV taxonomy has NO horror/romance/thriller/history tags — a series
+// can never carry these genres, so series decks filtered by them come up
+// empty. The lobby uses this to disable/annotate instead of dead-ending.
+export const SERIES_UNSUPPORTED_GENRES = ['Horror', 'Romance', 'Thriller', 'History'];
 
 // ═══ Misc ═══
 export const AVATARS = ['😎','🤩','🥳','😈','🦊','🐻','🦄','🐲','🎃','👻','🤖','👾'];

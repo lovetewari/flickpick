@@ -4,7 +4,7 @@
 //  ranked by real FlickPick swipe data.
 // ═══════════════════════════════════════════════════════════════
 import { createClient } from '@supabase/supabase-js';
-import { LEGACY_CATEGORY, SERIES_OFFSET } from '@/lib/constants';
+import { LEGACY_CATEGORY, SERIES_OFFSET, expandPlatforms } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,10 +77,14 @@ async function hotIds() {
 // Build one deck for a type ('movie' | 'series'), honoring filters with
 // graceful fallbacks so the host always gets a full deck when possible.
 async function buildDeck(type, count, { category, genre, platforms, hot }) {
+  // Selected platforms are canonical brand names ("Prime Video") but the
+  // catalog stores names as TMDB sends them ("Amazon Prime Video with Ads") —
+  // expand to every known spelling or the filter silently misses rows.
+  const wanted = expandPlatforms(platforms);
   const query = (usePlatforms) => {
     let q = sb.from('catalog').select('*').eq('type', type);
     if (genre && genre !== 'All') q = q.contains('genres', [genre]);
-    if (usePlatforms && platforms.length) q = q.overlaps('providers', platforms);
+    if (usePlatforms && wanted.length) q = q.overlaps('providers', wanted);
     return q;
   };
 
@@ -102,15 +106,23 @@ async function buildDeck(type, count, { category, genre, platforms, hot }) {
     take((data || []).sort((a, b) => rank.get(a.id) - rank.get(b.id)));
   }
 
-  // Primary category fill (also the fallback when 'hot' has little data yet)
-  if (picked.length < count) {
-    const { data } = await applyCategory(query(true), category === 'hot' ? 'hits' : category).limit(count * 2);
-    take(data);
-  }
-
-  // Platform filter starved the deck → fill the rest ignoring platforms
-  if (picked.length < count && platforms.length) {
-    const { data } = await applyCategory(query(false), category === 'hot' ? 'hits' : category).limit(count * 2);
+  // Fill cascade — TYPE and GENRE stay strict at every step; only the
+  // category constraints and platform filter relax, in order, so the host
+  // gets exactly the counts they asked for whenever the catalog has enough
+  // titles of that type + genre. (Categories like hidden_gems carry hard
+  // vote/rating cuts that can starve a deck on their own.)
+  const cat = category === 'hot' ? 'hits' : category;
+  const fills = [
+    () => applyCategory(query(true), cat).limit(count * 2),                          // category + platforms
+    () => wanted.length ? applyCategory(query(false), cat).limit(count * 2) : null,  // drop platform filter
+    () => query(false).order('hit_score', { ascending: false }).limit(count * 3),    // drop category cuts → best of catalog
+    () => query(false).order('popularity', { ascending: false }).limit(Math.max(count * 4, 80)), // last resort: anything of this type+genre
+  ];
+  for (const fill of fills) {
+    if (picked.length >= count) break;
+    const q = fill();
+    if (!q) continue;
+    const { data } = await q;
     take(data);
   }
 
@@ -126,8 +138,12 @@ const TMDB_GENRE = {
   99: 'Documentary', 18: 'Drama', 10751: 'Family', 14: 'Fantasy', 36: 'History',
   27: 'Horror', 10402: 'Music', 9648: 'Mystery', 10749: 'Romance', 878: 'Sci-Fi',
   53: 'Thriller', 10752: 'War', 37: 'Western',
-  10759: 'Action', 10762: 'Kids', 10765: 'Sci-Fi', 10768: 'War',
+  10762: 'Kids', 10768: 'War',
 };
+// TV combo genres carry both halves (matches the seeder's mapping).
+const TMDB_GENRE_MULTI = { 10759: ['Action', 'Adventure'], 10765: ['Sci-Fi', 'Fantasy'] };
+const mapTmdbGenres = ids =>
+  [...new Set((ids || []).flatMap(g => TMDB_GENRE_MULTI[g] || (TMDB_GENRE[g] ? [TMDB_GENRE[g]] : [])))];
 const TMDB_CAT = {
   movie: { hot: '/trending/movie/week', hits: '/movie/popular', most_watched: '/movie/popular', latest: '/movie/now_playing', top_rated: '/movie/top_rated', hidden_gems: '/movie/top_rated' },
   series: { hot: '/trending/tv/week', hits: '/tv/popular', most_watched: '/tv/popular', latest: '/tv/on_the_air', top_rated: '/tv/top_rated', hidden_gems: '/tv/top_rated' },
@@ -142,15 +158,17 @@ async function tmdbFallbackDeck(type, count, { category, genre }) {
     fetch(`${base}${ep}?api_key=${key}&language=en-US&page=${page}`, {
       signal: AbortSignal.timeout(5000), next: { revalidate: 1800 },
     }).then(r => r.json()).catch(() => ({}));
-  const [p1, p2] = await Promise.all([get(1), get(2)]);
+  const [p1, p2, p3] = await Promise.all([get(1), get(2), get(3)]);
   const offset = type === 'series' ? SERIES_OFFSET : 0;
-  let rows = [...(p1.results || []), ...(p2.results || [])]
+  const seen = new Set();
+  let rows = [...(p1.results || []), ...(p2.results || []), ...(p3.results || [])]
     .filter(x => x.poster_path && (x.title || x.name))
+    .filter(x => !seen.has(x.id) && seen.add(x.id)) // TMDB pages can repeat titles
     .map(x => ({
       id: x.id + offset,
       title: x.title || x.name,
       year: Number(String(x.release_date || x.first_air_date || '').slice(0, 4)) || 0,
-      genre: (x.genre_ids || []).map(g => TMDB_GENRE[g]).filter(Boolean).slice(0, 3),
+      genre: mapTmdbGenres(x.genre_ids).slice(0, 3),
       rating: Math.round((x.vote_average || 0) * 10) / 10,
       poster: `${IMG}${x.poster_path}`,
       posterPath: x.poster_path,
@@ -159,10 +177,8 @@ async function tmdbFallbackDeck(type, count, { category, genre }) {
       seasons: 0, episodes: 0, status: '', network: '',
       popularity: x.popularity || 0,
     }));
-  if (genre && genre !== 'All') {
-    const filtered = rows.filter(r => r.genre.includes(genre));
-    if (filtered.length >= Math.min(5, count)) rows = filtered; // don't starve the deck
-  }
+  // Genre stays strict — a short deck is honest, wrong-genre padding is not.
+  if (genre && genre !== 'All') rows = rows.filter(r => r.genre.includes(genre));
   return rows.slice(0, count);
 }
 
@@ -206,7 +222,17 @@ export async function GET(req) {
       );
     }
 
-    return Response.json({ results, count: results.length });
+    // requested vs delivered — lets the lobby say "only 6 Horror gems exist"
+    // instead of silently serving a smaller deck.
+    const requested = {
+      movies: type !== 'series' ? movieCount : 0,
+      series: type !== 'movies' ? seriesCount : 0,
+    };
+    const delivered = {
+      movies: results.filter(r => r.type === 'movie').length,
+      series: results.filter(r => r.type === 'series').length,
+    };
+    return Response.json({ results, count: results.length, requested, delivered });
   } catch (err) {
     console.error('Content error:', err);
     return Response.json({ error: err.message, results: [] }, { status: 500 });

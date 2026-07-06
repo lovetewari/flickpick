@@ -99,6 +99,41 @@ describe('GET /api/content', () => {
     expect(new Set(d.results.map(r => r.id)).size).toBe(3); // no duplicates from the two passes
   });
 
+  it('expands a canonical platform into stored catalog spellings for the overlaps filter', async () => {
+    h.current.queue('catalog', { data: Array.from({ length: 5 }, (_, i) => movieRow(i + 1)), error: null });
+    await get('type=movies&category=hits&movieCount=5&platforms=Prime+Video');
+    const overlaps = h.current.calls.find(c => c.table === 'catalog').chain.find(c => c.method === 'overlaps');
+    expect(overlaps.args[0]).toBe('providers');
+    expect(overlaps.args[1]).toEqual(expect.arrayContaining([
+      'Prime Video', 'Amazon Prime Video', 'Amazon Prime Video with Ads',
+    ]));
+  });
+
+  it('relaxes category constraints (never type/genre) until the requested count is met', async () => {
+    // hidden_gems' vote/rating cuts starve the catalog: primary fill finds
+    // only 4, the hit_score pass adds 4 more, the popularity pass finishes.
+    h.current.queue('catalog', { data: Array.from({ length: 4 }, (_, i) => movieRow(i + 1)), error: null });   // category fill
+    h.current.queue('catalog', { data: Array.from({ length: 8 }, (_, i) => movieRow(i + 1)), error: null });   // hit_score (4 dupes + 4 new)
+    h.current.queue('catalog', { data: Array.from({ length: 12 }, (_, i) => movieRow(i + 1)), error: null });  // popularity
+    const d = await (await get('type=movies&category=hidden_gems&genre=Horror&movieCount=10')).json();
+    expect(d.results.length).toBe(10);
+    expect(new Set(d.results.map(r => r.id)).size).toBe(10);
+    // every relaxation query kept the genre filter strict
+    const catalogCalls = h.current.calls.filter(c => c.table === 'catalog');
+    for (const call of catalogCalls) {
+      const contains = call.chain.find(c => c.method === 'contains');
+      expect(contains?.args).toEqual(['genres', ['Horror']]);
+    }
+  });
+
+  it('reports requested vs delivered so the UI can flag a genuinely short deck', async () => {
+    h.current.queue('catalog', { data: Array.from({ length: 6 }, (_, i) => movieRow(i + 1)), error: null });
+    // remaining cascade queries return nothing — only 6 titles exist
+    const d = await (await get('type=movies&category=hits&movieCount=10')).json();
+    expect(d.requested).toEqual({ movies: 10, series: 0 });
+    expect(d.delivered).toEqual({ movies: 6, series: 0 });
+  });
+
   it('503s with a helpful message when the catalog has never been seeded', async () => {
     h.current.queue('catalog', { data: [], error: null }); // deck query: empty
     h.current.queue('catalog', { data: [], error: null }); // platform fallback: empty

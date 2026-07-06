@@ -65,17 +65,29 @@ describe('GET /api/health', () => {
 describe('GET /api/providers', () => {
   it('returns aliased, prioritized providers with real TMDB logo urls', async () => {
     vi.stubEnv('TMDB_API_KEY', 'k');
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
-      json: () => Promise.resolve({ results: [
-        { provider_name: 'Some Obscure TV', logo_path: '/x.jpg', display_priority: 3 },
-        { provider_name: 'Amazon Prime Video', logo_path: '/pv.jpg', display_priority: 2 },
-        { provider_name: 'Netflix', logo_path: '/nf.jpg', display_priority: 1 },
-        { provider_name: 'Netflix', logo_path: '/dup.jpg', display_priority: 9 }, // deduped
-        { provider_name: 'Sketchy', logo_path: '../../etc/passwd', display_priority: 1 }, // invalid path → dropped
-        { provider_name: 'Apple TV', logo_path: '/atv.jpg', display_priority: 4 },        // store variant…
-        { provider_name: 'Apple TV Plus', logo_path: '/atvp.jpg', display_priority: 5 },  // …collapses with this one
-        { provider_name: 'JustWatchTV', logo_path: '/jw.jpg', display_priority: 1 },      // aggregator → excluded
-      ] }),
+    const REGIONAL = { results: [
+      { provider_name: 'Some Obscure TV', logo_path: '/x.jpg', display_priority: 3 },
+      { provider_name: 'Amazon Prime Video', logo_path: '/pv.jpg', display_priority: 2 },
+      { provider_name: 'Netflix', logo_path: '/nf.jpg', display_priority: 1 },
+      { provider_name: 'Netflix', logo_path: '/dup.jpg', display_priority: 9 }, // deduped
+      { provider_name: 'Sketchy', logo_path: '../../etc/passwd', display_priority: 1 }, // invalid path → dropped
+      { provider_name: 'Apple TV', logo_path: '/atv.jpg', display_priority: 4 },        // store variant…
+      { provider_name: 'Apple TV Plus', logo_path: '/atvp.jpg', display_priority: 5 },  // …collapses with this one
+      { provider_name: 'JustWatchTV', logo_path: '/jw.jpg', display_priority: 1 },      // aggregator → excluded
+    ] };
+    // Global registry carries brands with NO regional presence — their logos
+    // must still reach the lobby picker via the logos map.
+    const GLOBAL = { results: [
+      ...REGIONAL.results,
+      { provider_name: 'Hulu', logo_path: '/hulu.jpg', display_priority: 7 },
+      { provider_name: 'Disney Plus', logo_path: '/dp.jpg', display_priority: 8 },
+      // channel bundle listed BEFORE the parent brand — the parent's own
+      // logo must still win the map (shortest raw name = parent brand)
+      { provider_name: 'HBO Max Amazon Channel', logo_path: '/hbochan.jpg', display_priority: 9 },
+      { provider_name: 'Max', logo_path: '/max.jpg', display_priority: 10 },
+    ] };
+    vi.stubGlobal('fetch', vi.fn(url => Promise.resolve({
+      json: () => Promise.resolve(String(url).includes('watch_region') ? REGIONAL : GLOBAL),
     })));
     try {
       const d = await (await getProviders()).json();
@@ -86,6 +98,14 @@ describe('GET /api/providers', () => {
       expect(d.providers.find(p => p.name === 'Sketchy')).toBeUndefined(); // invalid logo path rejected
       expect(d.providers.filter(p => /Apple/.test(p.name))).toHaveLength(1); // variants collapse to one Apple TV+
       expect(d.providers.find(p => /justwatch/i.test(p.name))).toBeUndefined(); // aggregator excluded
+      // regional row untouched by global-only brands…
+      expect(d.providers.find(p => p.name === 'Hulu')).toBeUndefined();
+      // …but the logos map covers them, normalized (Disney Plus → Disney+)
+      expect(d.logos['Hulu']).toBe('https://image.tmdb.org/t/p/w92/hulu.jpg');
+      expect(d.logos['Disney+']).toBe('https://image.tmdb.org/t/p/w92/dp.jpg');
+      expect(d.logos['Netflix']).toBe('https://image.tmdb.org/t/p/w92/nf.jpg');
+      // parent-brand logo beats the channel bundle's mark
+      expect(d.logos['Max']).toBe('https://image.tmdb.org/t/p/w92/max.jpg');
     } finally { vi.unstubAllGlobals(); }
   });
 

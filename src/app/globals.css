@@ -371,6 +371,86 @@ header {
   color: #fff;
   box-shadow: 0 4px 12px -3px var(--badge-glow);
 }
+.chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* ── Platform picker (lobby) — real OTT logos, spring taps ── */
+.plat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+.plat-chip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 6px 10px;
+  border-radius: 16px;
+  border: 0.5px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.plat-chip:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.plat-chip:active { transform: scale(0.95); }
+.plat-chip[data-active='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.plat-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.plat-any {
+  background: var(--brand-grad);
+  color: #fff;
+}
+.plat-name {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plat-chip[data-active='true'] .plat-name { color: var(--text); }
+.plat-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  animation: platPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes platPop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (max-width: 480px) {
+  .plat-grid { grid-template-columns: repeat(3, 1fr); }
+}
 
 /* ── Segmented control (iOS style) ── */
 .segmented {

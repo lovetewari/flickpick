@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { OTT_PLATFORMS, OTT_BG, GENRES, CONTENT_TYPES, getCategoriesForType, COLORS, DECK_SIZES, LEGACY_CATEGORY, CATEGORIES } from '@/lib/constants';
+import { OTT_PLATFORMS, OTT_BG, ottBg, normProvider, GENRES, SERIES_UNSUPPORTED_GENRES, CONTENT_TYPES, getCategoriesForType, COLORS, DECK_SIZES, LEGACY_CATEGORY, CATEGORIES } from '@/lib/constants';
 import CinematicBG from '@/components/CinematicBG';
 import Toast from '@/components/Toast';
 import SwipeCard from '@/components/SwipeCard';
@@ -39,6 +39,38 @@ export default function RoomPage() {
   const [content, setContent] = useState([]);
   const [contentLoading, setContentLoading] = useState(false);
   const [contentLoaded, setContentLoaded] = useState(false);
+  const abortRef = useRef(null); // cancels a stale deck build when filters change
+
+  // Real platform logos for the picker (day-cached; gradient chips as fallback).
+  // `logos` is the global TMDB registry map — covers brands not streaming in
+  // this region (Disney+/Max/Hulu) so every chip still gets its official mark.
+  const [provData, setProvData] = useState({ providers: [], logos: {} });
+  useEffect(() => {
+    let on = true;
+    try {
+      const c = JSON.parse(sessionStorage.getItem('fp_platforms_v2') || 'null');
+      if (c?.t && Date.now() - c.t < 86400000 && c.providers?.length) { setProvData(c); return; }
+    } catch {}
+    fetch('/api/providers').then(r => r.json()).then(d => {
+      if (!on || !d?.providers?.length) return;
+      const next = { providers: d.providers, logos: d.logos || {} };
+      setProvData(next);
+      try { sessionStorage.setItem('fp_platforms_v2', JSON.stringify({ t: Date.now(), ...next })); } catch {}
+    }).catch(() => {});
+    return () => { on = false; };
+  }, []);
+
+  // API providers (regional, real logos) first, then any base brand it didn't
+  // cover — logo from the global registry map before falling back to a letter.
+  const platformChoices = useMemo(() => {
+    const { providers, logos } = provData;
+    const fromList = new Map(providers.map(p => [p.name, p.logo]));
+    const names = [...new Set([...providers.map(p => p.name), ...OTT_PLATFORMS.map(p => p.name)])];
+    return names.map(n => {
+      const canonical = normProvider(n);
+      return { name: n, logo: fromList.get(n) || logos[n] || logos[canonical] || '' };
+    });
+  }, [provData]);
 
   const [movieIdx, setMovieIdx] = useState(0);
 
@@ -52,6 +84,9 @@ export default function RoomPage() {
   useEffect(() => {
     const cats = getCategoriesForType(contentType);
     if (!cats.find(c => c.id === category)) setCategory(cats[0].id);
+    // TV taxonomy has no Horror/Romance/Thriller/History — leaving one
+    // selected in series-only mode would build an empty deck.
+    if (contentType === 'series' && SERIES_UNSUPPORTED_GENRES.includes(genre)) setGenre('All');
     setContentLoaded(false);
     setContent([]);
   }, [contentType]);
@@ -110,7 +145,13 @@ export default function RoomPage() {
       setIsHost(host);
       setMyToken(token);
 
-      const { data: r } = await supabase.from('rooms').select('*').eq('code', code.toUpperCase()).single();
+      // Room + players in ONE round-trip (players joined via room code) —
+      // sequential fetches doubled the time-to-lobby on slow connections.
+      const CODE = code.toUpperCase();
+      const [{ data: r }, { data: psJoin }] = await Promise.all([
+        supabase.from('rooms').select('*').eq('code', CODE).single(),
+        supabase.from('players').select('*, room:rooms!inner(code)').eq('room.code', CODE).order('player_order'),
+      ]);
       if (!r) { setScreen('notFound'); return; }
       setRoom(r);
       if (r.platforms?.length) setPlatforms(r.platforms);
@@ -123,7 +164,10 @@ export default function RoomPage() {
       if (r.movie_count) setDeckMovies(r.movie_count);
       if (r.series_count) setDeckSeries(r.series_count);
 
-      const { data: ps } = await supabase.from('players').select('*').eq('room_id', r.id).order('player_order');
+      // Fall back to the classic query if the joined one returned nothing
+      // (e.g. a PostgREST version without embedded filters).
+      let ps = psJoin;
+      if (!ps) ({ data: ps } = await supabase.from('players').select('*').eq('room_id', r.id).order('player_order'));
       setPlayers(ps || []);
 
       if (r.status === 'lobby') {
@@ -188,26 +232,49 @@ export default function RoomPage() {
     // event (dropped events, reconnect storms — the main instability source).
   }, [room?.id]);
 
-  const loadContent = useCallback(async () => {
+  const loadContent = useCallback(async ({ silent = false } = {}) => {
+    // A newer build supersedes any in-flight one — never let a slow response
+    // for stale filters overwrite the deck (the "laggy on bad wifi" feel).
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setContentLoading(true);
     try {
       const params = new URLSearchParams({
         type: contentType, category, genre, platforms: platforms.join(','),
         movieCount: String(deckMovies), seriesCount: String(deckSeries),
       });
-      const r = await fetch(`/api/content?${params}`);
+      const r = await fetch(`/api/content?${params}`, { signal: ctrl.signal });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setContent(d.results || []);
       setContentLoaded(true);
+      // Be honest when the catalog runs dry for a narrow filter combo.
       const mc = (d.results || []).filter(c => c.type === 'movie').length;
       const sc = (d.results || []).filter(c => c.type === 'series').length;
-      if (contentType === 'movies') show(`${mc} movies loaded`);
-      else if (contentType === 'series') show(`${sc} web series loaded`);
-      else show(`${mc} movies + ${sc} series loaded`);
-    } catch (err) { show('Failed: ' + err.message); setContent([]); }
+      const short = [];
+      if (d.requested?.movies > 0 && mc < d.requested.movies) short.push(`${mc} of ${d.requested.movies} movies`);
+      if (d.requested?.series > 0 && sc < d.requested.series) short.push(`${sc} of ${d.requested.series} series`);
+      if (short.length) show(`Loaded ${short.join(' · ')} — that's every match for these filters`);
+      else if (!silent) {
+        if (contentType === 'movies') show(`${mc} movies loaded`);
+        else if (contentType === 'series') show(`${sc} web series loaded`);
+        else show(`${mc} movies + ${sc} series loaded`);
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') return; // superseded — the newer request owns the state
+      show('Failed: ' + err.message); setContent([]);
+    }
     setContentLoading(false);
   }, [contentType, category, genre, platforms, deckMovies, deckSeries]);
+
+  // Live deck preview: rebuild automatically as the host tweaks filters —
+  // debounced so a burst of taps fires ONE request (stale ones are aborted).
+  useEffect(() => {
+    if (screen !== 'lobby' || contentLoaded) return;
+    const t = setTimeout(() => loadContent({ silent: true }), 500);
+    return () => clearTimeout(t);
+  }, [screen, contentLoaded, loadContent]);
 
   const fetchResults = async () => {
     try {
@@ -316,7 +383,8 @@ export default function RoomPage() {
   const progress = content.length > 0 ? (movieIdx / content.length) * 100 : 0;
   const movieCount = content.filter(c => c.type === 'movie').length;
   const seriesCount = content.filter(c => c.type === 'series').length;
-  const canStart = platforms.length > 0 && players.length >= 2 && content.length > 0 && contentLoaded;
+  // "Any platform" is a valid choice — platforms no longer gate the start.
+  const canStart = players.length >= 2 && content.length > 0 && contentLoaded;
   const categories = getCategoriesForType(contentType);
 
   const CodePill = () => (
@@ -348,7 +416,9 @@ export default function RoomPage() {
     </div>
   </>);
 
-  if (contentLoading) return <BrandLoader label="Loading content…" />;
+  // Full-screen loader only while restoring a running game — in the lobby the
+  // deck builds inline (skeleton preview) so the screen never blinks away.
+  if (contentLoading && screen !== 'lobby') return <BrandLoader label="Loading content…" />;
 
   // ── ROOM NOT FOUND (invalid or expired link) ──
   if (screen === 'notFound') return (<><CinematicBG variant="content" />
@@ -487,32 +557,58 @@ export default function RoomPage() {
 
             {/* 4. Platforms */}
             <section className="rise" style={{ animationDelay: '.1s' }}>
-              <h3 className="text-[17px] font-bold text-ink mb-3">Streaming platforms</h3>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">{OTT_PLATFORMS.map(p => { const sel = platforms.includes(p.name); return (
-                <button key={p.name} onClick={() => setPlatforms(prev => prev.includes(p.name) ? prev.filter(x => x !== p.name) : [...prev, p.name])}
-                  className="rounded-2xl py-3.5 px-2 flex flex-col items-center gap-1 transition-all border"
-                  style={{ background: sel ? p.bg : 'var(--bg-elevated)', borderColor: sel ? 'transparent' : 'var(--border)', transform: sel ? 'scale(1.02)' : 'none', boxShadow: sel ? `0 6px 22px ${p.color}44` : 'none' }}>
-                  <span className={`text-[11px] font-bold text-center leading-tight ${sel ? 'text-white' : 'text-ink-2'}`}>{p.name}</span>
-                  {sel && <IconCheck size={14} />}
+              <h3 className="text-[17px] font-bold text-ink mb-1">Streaming platforms</h3>
+              <p className="text-ink-3 text-[13px] mb-3">Pick where your group can watch — or leave it on Any</p>
+              <div className="plat-grid">
+                <button onClick={() => setPlatforms([])} className="plat-chip" data-active={platforms.length === 0} aria-pressed={platforms.length === 0}>
+                  <span className="plat-logo plat-any"><IconSparkles size={15} /></span>
+                  <span className="plat-name">Any platform</span>
+                  {platforms.length === 0 && <span className="plat-check"><IconCheck size={10} /></span>}
                 </button>
-              ); })}</div>
+                {platformChoices.map(p => { const sel = platforms.includes(p.name); return (
+                  <button key={p.name} onClick={() => setPlatforms(prev => sel ? prev.filter(x => x !== p.name) : [...prev, p.name])}
+                    className="plat-chip" data-active={sel} aria-pressed={sel} title={p.name}>
+                    {p.logo
+                      ? <img src={p.logo} alt="" className="plat-logo" loading="lazy" decoding="async" />
+                      : <span className="plat-logo" style={{ background: ottBg(p.name), color: '#fff' }}>{p.name[0]}</span>}
+                    <span className="plat-name">{p.name}</span>
+                    {sel && <span className="plat-check"><IconCheck size={10} /></span>}
+                  </button>
+                ); })}
+              </div>
             </section>
 
             {/* 4. Genre */}
             <section className="rise" style={{ animationDelay: '.15s' }}>
               <h3 className="text-[15px] font-bold text-ink-2 mb-2.5">Genre filter</h3>
-              <div className="flex gap-2 flex-wrap">{GENRES.map(g => (
-                <button key={g} onClick={() => setGenre(g)} className="chip" data-active={genre === g}>{g}</button>
-              ))}</div>
+              <div className="flex gap-2 flex-wrap">{GENRES.map(g => {
+                const noSeries = contentType === 'series' && SERIES_UNSUPPORTED_GENRES.includes(g);
+                return (
+                  <button key={g} onClick={() => setGenre(g)} className="chip" data-active={genre === g}
+                    disabled={noSeries} title={noSeries ? 'Web series aren’t tagged with this genre' : undefined}>{g}</button>
+                );
+              })}</div>
+              {contentType === 'all' && SERIES_UNSUPPORTED_GENRES.includes(genre) && (
+                <p className="text-ink-3 text-[11px] mt-2">Web series aren&rsquo;t tagged &ldquo;{genre}&rdquo; — the series half of the deck will be small or empty.</p>
+              )}
             </section>
 
             {/* 5. Load + preview */}
             <section className="rise" style={{ animationDelay: '.2s' }}>
-              <button onClick={loadContent} disabled={contentLoading || platforms.length === 0} className="btn btn-secondary btn-block btn-lg">
-                {contentLoading ? <><span className="spinner !w-5 !h-5 !border-2" />Loading from TMDB…</> : <><IconSparkles size={18} />Load {contentType === 'movies' ? 'movies' : contentType === 'series' ? 'web series' : 'movies & series'}</>}
+              <button onClick={() => loadContent()} disabled={contentLoading} className="btn btn-secondary btn-block btn-lg">
+                {contentLoading ? <><span className="spinner !w-5 !h-5 !border-2" />Building your deck…</> : <><IconSparkles size={18} />Load {contentType === 'movies' ? 'movies' : contentType === 'series' ? 'web series' : 'movies & series'}</>}
               </button>
 
-              {contentLoaded && content.length > 0 && (
+              {contentLoading && (
+                <div className="mt-4 card p-4" data-testid="deck-skeleton" aria-hidden="true">
+                  <div className="skeleton h-[20px] w-44 mb-3" />
+                  <div className="flex gap-2.5 overflow-hidden">
+                    {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton shrink-0 w-[76px] h-[110px]" />)}
+                  </div>
+                </div>
+              )}
+
+              {!contentLoading && contentLoaded && content.length > 0 && (
                 <div className="mt-4 card p-4 rise">
                   <div className="flex items-center gap-2.5 mb-3 flex-wrap">
                     <span className="badge badge-success"><IconCheck size={11} />{content.length} titles ready</span>
@@ -523,7 +619,7 @@ export default function RoomPage() {
                     {content.slice(0, 12).map(c => (
                       <div key={c.id} className="shrink-0 w-[76px]" style={{ scrollSnapAlign: 'start' }}>
                         <div className="relative">
-                          <img src={c.poster} alt="" className="w-[76px] h-[110px] rounded-lg object-cover border border-hair" />
+                          <img src={(c.poster || '').replace('/w500/', '/w185/')} alt="" loading="lazy" decoding="async" className="w-[76px] h-[110px] rounded-lg object-cover border border-hair" />
                           <span className={`badge absolute top-1 left-1 !h-auto !px-1 !py-0.5 ${c.type === 'series' ? 'badge-series' : 'badge-movie'}`}>{c.type === 'series' ? <IconTv size={9} /> : <IconFilm size={9} />}</span>
                         </div>
                         <p className="text-ink-3 text-[9px] mt-1 truncate font-medium">{c.title}</p>
@@ -544,7 +640,7 @@ export default function RoomPage() {
             <button onClick={startSwiping} disabled={!canStart || startLoading} aria-busy={startLoading} className="btn btn-primary btn-block btn-lg">
               {startLoading ? <><span className="spinner !w-5 !h-5 !border-2 !border-white/40 !border-t-white" />Starting…</> : <><IconPlay size={18} />{contentType === 'movies' ? `Start swiping · ${movieCount} movies` : contentType === 'series' ? `Start swiping · ${seriesCount} series` : `Start swiping · ${content.length} titles`}</>}
             </button>
-            {!canStart && <p className="text-ink-3 text-[11px] text-center mt-2">{platforms.length === 0 ? 'Select at least one platform' : players.length < 2 ? 'Add at least 2 players' : !contentLoaded ? 'Load content first' : ''}</p>}
+            {!canStart && <p className="text-ink-3 text-[11px] text-center mt-2">{players.length < 2 ? 'Add at least 2 players' : contentLoading ? 'Building your deck…' : !contentLoaded ? 'Load content first' : ''}</p>}
           </div>
         </div>
       </div>
