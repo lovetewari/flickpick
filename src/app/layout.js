@@ -12,11 +12,11 @@ export const metadata = {
   title: 'FlickPick — Movie Night, Decided',
   description: 'Swipe together, match instantly, watch tonight. Movies & series, powered by TMDB.',
   applicationName: 'FlickPick',
-  icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml', sizes: 'any' }],
-    shortcut: [{ url: '/icon.svg', type: 'image/svg+xml', sizes: 'any' }],
-    apple: [{ url: '/icon.svg', type: 'image/svg+xml' }],
-  },
+  // NOTE: icons are intentionally NOT declared here. Letting the app/icon.svg
+  // and app/apple-icon.svg file conventions drive them makes Next emit a
+  // content-hashed URL (…/icon.svg?<hash>) that busts the browser's very
+  // aggressive favicon cache automatically on every redesign. A manual
+  // `/icon.svg` (no hash) freezes the tab icon on the first version forever.
   appleWebApp: {
     capable: true,
     title: 'FlickPick',
