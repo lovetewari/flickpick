@@ -5,7 +5,7 @@
 // Source order: OUR catalog (keyless, providers pre-seeded) → live TMDB
 // trending + watch-providers (needs TMDB_API_KEY) → keyless iTunes charts.
 import { createClient } from '@supabase/supabase-js';
-import { normProvider, isValidLogoUrl, SERIES_OFFSET } from '@/lib/constants';
+import { normProvider, resolveLogo, SERIES_OFFSET } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,7 +76,7 @@ function collectProviders(flatrate = []) {
   for (const p of flatrate) {
     const name = normProvider(p.provider_name);
     const url = p.logo_path && String(p.logo_path).startsWith('/') ? `${LOGO}${p.logo_path}` : null;
-    if (name && !seen.has(name)) seen.set(name, isValidLogoUrl(url) ? url : null);
+    if (name && !seen.has(name)) seen.set(name, resolveLogo(name, url) || null);
   }
   const names = [...seen.keys()].slice(0, 3);
   return { providers: names, providerLogos: names.map(n => seen.get(n)) };
@@ -136,7 +136,7 @@ async function fromCatalog(weekStart) {
     (r.providers || []).forEach((name, i) => {
       const n = normProvider(name);
       const logo = (r.provider_logos || [])[i];
-      if (n && !seen.has(n)) seen.set(n, isValidLogoUrl(logo) ? logo : null); // reject junk urls
+      if (n && !seen.has(n)) seen.set(n, resolveLogo(n, logo) || null); // curated override, else trusted url, else null
     });
     const providers = [...seen.keys()].slice(0, 3);
     return {

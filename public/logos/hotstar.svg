@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 132" width="300" height="132">
+  <defs>
+    <linearGradient id="h" x1="20" y1="0" x2="280" y2="132" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A6DF4"/>
+      <stop offset="0.55" stop-color="#152F9E"/>
+      <stop offset="1" stop-color="#0A1750"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="296" height="128" rx="30" fill="url(#h)"/>
+  <path d="M150 26 L157 46 L178 47 L161 60 L167 81 L150 68 L133 81 L139 60 L122 47 L143 46 Z" fill="#fff"/>
+  <text x="150" y="108" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="46" font-weight="700" letter-spacing="-1.5" fill="#fff">hotstar</text>
+</svg>

@@ -102,11 +102,31 @@ export function ottBg(name) {
   return OTT_BG_ALL[name] || 'linear-gradient(135deg,#3a3a44,#22222a)';
 }
 
-// A provider logo is only "real" if it comes from TMDB's image CDN — anything
+// A provider logo is only "real" if it's a trusted source: TMDB's image CDN,
+// OR one of our own curated /logos/*.svg files (see BRAND_LOGOS). Everything
 // else (junk in the catalog, injected values) is rejected so the UI falls
 // back to the branded glyph instead of rendering an untrusted URL.
 export function isValidLogoUrl(u) {
-  return typeof u === 'string' && /^https:\/\/image\.tmdb\.org\/t\/p\/w\d+\/[\w.-]+\.(jpg|jpeg|png|webp)$/i.test(u);
+  return typeof u === 'string' && (
+    /^https:\/\/image\.tmdb\.org\/t\/p\/w\d+\/[\w.-]+\.(jpg|jpeg|png|webp)$/i.test(u) ||
+    /^\/logos\/[\w-]+\.svg$/.test(u)
+  );
+}
+
+// Curated overrides for brands whose TMDB logo is broken or ugly. TMDB serves
+// JioHotstar as a 100×100 square crop that literally cuts off "…star" (reads
+// "JioHot") — unusable at any size — so we self-host a clean Hotstar mark and
+// use it instead. Keyed by the canonical (normProvider) name.
+export const BRAND_LOGOS = {
+  Hotstar: '/logos/hotstar.svg',
+};
+
+// Resolve the logo to render for a provider: a curated override wins, else the
+// TMDB url if it's trustworthy, else '' (caller falls back to a branded chip).
+export function resolveLogo(name, tmdbUrl) {
+  const override = BRAND_LOGOS[normProvider(name)];
+  if (override) return override;
+  return isValidLogoUrl(tmdbUrl) ? tmdbUrl : '';
 }
 
 // ═══ Genres ═══

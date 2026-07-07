@@ -1,7 +1,7 @@
 // Streaming platforms row for the landing — REAL provider logos served from
 // TMDB's watch-provider registry (data & logos courtesy of JustWatch via
 // TMDB; we render the required attribution next to them in the UI).
-import { isValidLogoUrl, normProvider } from '@/lib/constants';
+import { isValidLogoUrl, normProvider, resolveLogo, BRAND_LOGOS } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,8 +37,9 @@ export async function GET() {
       if (!name || !p.logo_path || seen.has(name)) continue;
       if (/justwatch/i.test(name)) continue; // data aggregator, not a streaming platform
       if (/store|google play|youtube|movies anywhere/i.test(name)) continue; // rent/buy storefronts, not streaming subs
-      const logo = `${LOGO}${p.logo_path}`;
-      if (!isValidLogoUrl(logo)) continue; // only trusted TMDB CDN logos
+      // Curated override wins over TMDB (JioHotstar's TMDB logo is a broken crop).
+      const logo = resolveLogo(name, `${LOGO}${p.logo_path}`);
+      if (!logo) continue; // no trusted logo → skip (branded chip fallback)
       seen.set(name, {
         name,
         logo,
@@ -62,6 +63,8 @@ export async function GET() {
       if (!cur || raw.length < cur.rawLen) best.set(name, { logo, rawLen: raw.length });
     }
     const logos = Object.fromEntries([...best.entries()].map(([n, v]) => [n, v.logo]));
+    // Curated overrides win over the TMDB registry map too.
+    for (const [name, url] of Object.entries(BRAND_LOGOS)) logos[name] = url;
     const payload = { providers, logos };
     if (providers.length) CACHE = { t: Date.now(), payload };
     return Response.json(payload);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normProvider, isValidLogoUrl, expandPlatforms } from '@/lib/constants';
+import { normProvider, isValidLogoUrl, expandPlatforms, resolveLogo, BRAND_LOGOS } from '@/lib/constants';
 
 // TMDB lists brand variants as separate providers — every variant must
 // collapse to ONE display brand, or cards show duplicate logos side by side
@@ -60,16 +60,40 @@ describe('expandPlatforms — canonical brand → every stored spelling', () => 
   });
 });
 
-describe('isValidLogoUrl — only the TMDB image CDN passes', () => {
+describe('isValidLogoUrl — TMDB CDN or our own curated /logos passes', () => {
   it.each([
     ['https://image.tmdb.org/t/p/w45/abc.jpg', true],
     ['https://image.tmdb.org/t/p/w92/x-1.png', true],
+    ['/logos/hotstar.svg', true],            // curated self-hosted brand logo
+    ['/logos/sony-liv.svg', true],
     ['https://evil.example.com/steal.png', false],
+    ['/logos/../../etc/passwd', false],      // no traversal
+    ['/logos/evil.js', false],               // svg only
     ['javascript:alert(1)', false],
     ['https://image.tmdb.org/t/p/w45/../../etc/passwd', false],
     ['', false],
     [null, false],
   ])('%s → %s', (input, expected) => {
     expect(isValidLogoUrl(input)).toBe(expected);
+  });
+});
+
+// TMDB serves JioHotstar as a broken square crop that reads "JioHot" — the
+// curated override must win over any TMDB url for that brand, at every spelling.
+describe('resolveLogo — curated overrides beat TMDB', () => {
+  it('overrides Hotstar (and its variants) with the self-hosted mark', () => {
+    expect(resolveLogo('Hotstar', 'https://image.tmdb.org/t/p/w154/jiohot.jpg')).toBe('/logos/hotstar.svg');
+    expect(resolveLogo('JioHotstar', 'https://image.tmdb.org/t/p/w154/jiohot.jpg')).toBe('/logos/hotstar.svg');
+    expect(resolveLogo('Disney+ Hotstar', null)).toBe('/logos/hotstar.svg');
+    expect(BRAND_LOGOS.Hotstar).toBe('/logos/hotstar.svg');
+  });
+
+  it('passes a trusted TMDB url through untouched for non-overridden brands', () => {
+    expect(resolveLogo('Netflix', 'https://image.tmdb.org/t/p/w154/nf.jpg')).toBe('https://image.tmdb.org/t/p/w154/nf.jpg');
+  });
+
+  it('returns empty for an untrusted url (caller falls back to a chip)', () => {
+    expect(resolveLogo('Netflix', 'https://evil.example.com/x.png')).toBe('');
+    expect(resolveLogo('Netflix', null)).toBe('');
   });
 });

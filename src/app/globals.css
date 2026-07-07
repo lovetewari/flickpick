@@ -408,7 +408,7 @@ header {
   width: 40px;
   height: 40px;
   border-radius: 11px;
-  object-fit: cover;
+  object-fit: contain;
   display: grid;
   place-items: center;
   font-size: 15px;
@@ -773,19 +773,22 @@ header {
   box-shadow: 0 10px 26px -8px rgba(0, 0, 0, 0.7);
 }
 .platform-mark {
-  width: 52px;
+  /* Fixed HEIGHT, auto width — a square app-icon stays 52×52, but a wordmark
+     logo (e.g. hotstar) keeps its natural length instead of being cropped. */
   height: 52px;
+  width: auto;
+  max-width: 132px;
   display: block;
   flex: 0 0 auto;
   border-radius: 14px;
-  object-fit: cover;
+  object-fit: contain;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.85);
 }
 @media (max-width: 640px) {
   .platform-mark {
-    width: 46px;
     height: 46px;
+    max-width: 118px;
     border-radius: 13px;
   }
 }
@@ -926,7 +929,7 @@ a[href]:active,
   box-shadow: 0 8px 18px -9px rgba(0, 0, 0, 0.85);
 }
 .provider-mark-img {
-  object-fit: cover;
+  object-fit: contain;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(0, 0, 0, 0.22);
 }
