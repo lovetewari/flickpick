@@ -773,14 +773,21 @@ header {
   box-shadow: 0 10px 26px -8px rgba(0, 0, 0, 0.7);
 }
 .platform-mark {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   display: block;
   flex: 0 0 auto;
-  border-radius: 12px;
+  border-radius: 14px;
   object-fit: cover;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.85);
+}
+@media (max-width: 640px) {
+  .platform-mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+  }
 }
 .platform-mark-fallback,
 .platform-mark-imax {
@@ -862,54 +869,36 @@ a[href]:active,
   width: 124px;
   scroll-snap-align: start;
 }
-.rank-badge {
+/* Netflix-"Top 10" style rank numeral, bottom-left on the poster.
+   Composite-cheap: static text, one-shot pop-in, drop-shadow rendered once. */
+.rank-num {
   position: absolute;
-  top: 7px;
-  left: 7px;
+  bottom: 3px;
+  left: 6px;
   z-index: 5;
-  min-width: 26px;
-  height: 26px;
-  padding: 0 7px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(9, 9, 12, 0.78);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.8);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.06em;
+  color: #101014;
+  -webkit-text-stroke: 1.6px rgba(255, 255, 255, 0.92);
+  paint-order: stroke fill;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.7));
+  pointer-events: none;
+  user-select: none;
   animation: rankPop 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) both;
   animation-delay: calc(120ms + var(--rank-index, 0) * 45ms);
 }
-.rank-badge-top {
-  background: linear-gradient(145deg, #ffb047, #ff375f 58%, #bf5af2);
-  border-color: rgba(255, 255, 255, 0.34);
-  animation: rankPop 0.44s cubic-bezier(0.18, 0.86, 0.24, 1.08) both;
-  animation-delay: calc(120ms + var(--rank-index, 0) * 45ms);
+/* Top 3 wear the brand gradient inside the white outline */
+.rank-num-top {
+  background: linear-gradient(160deg, #ffb047, #ff375f 58%, #bf5af2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-/* Pulse the #1 badge glow via pseudo-element OPACITY (composite-only) —
-   the old box-shadow keyframes repainted the card every frame, forever. */
-.rank-badge-top::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border-radius: 999px;
-  box-shadow: 0 10px 24px -8px rgba(255, 55, 95, 0.72);
-  opacity: 0;
-  z-index: -1;
-  animation: rankGlow 2.8s ease-in-out 1.2s infinite;
-}
-@keyframes rankGlow {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
+.rank-num-2d {
+  font-size: 34px;
+  letter-spacing: -0.09em;
 }
 .provider-stack {
   position: absolute;
@@ -1111,10 +1100,25 @@ a[href]:active,
 @media (prefers-reduced-motion: reduce) {
   .pcol,
   .sat-float,
-  .rank-badge-top::after,
+  .rank-num,
   div.pframe::after,
+  .route-fade,
   .trend-card {
     animation: none !important;
+  }
+}
+
+/* ── Route transitions: every page mounts with a soft fade (template.js).
+   Opacity-only — no transform, so fixed/sticky descendants are unaffected. ── */
+.route-fade {
+  animation: routeFade 0.22s ease;
+}
+@keyframes routeFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 @keyframes scrollUp {

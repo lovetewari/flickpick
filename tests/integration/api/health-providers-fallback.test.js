@@ -91,8 +91,8 @@ describe('GET /api/providers', () => {
     })));
     try {
       const d = await (await getProviders()).json();
-      expect(d.providers[0]).toEqual({ name: 'Netflix', logo: 'https://image.tmdb.org/t/p/w92/nf.jpg' });
-      expect(d.providers[1]).toEqual({ name: 'Prime Video', logo: 'https://image.tmdb.org/t/p/w92/pv.jpg' });
+      expect(d.providers[0]).toEqual({ name: 'Netflix', logo: 'https://image.tmdb.org/t/p/w154/nf.jpg' });
+      expect(d.providers[1]).toEqual({ name: 'Prime Video', logo: 'https://image.tmdb.org/t/p/w154/pv.jpg' });
       expect(d.providers.filter(p => p.name === 'Netflix')).toHaveLength(1);
       expect(d.providers.at(-1).name).toBe('Some Obscure TV'); // non-preferred sorts last
       expect(d.providers.find(p => p.name === 'Sketchy')).toBeUndefined(); // invalid logo path rejected
@@ -101,11 +101,11 @@ describe('GET /api/providers', () => {
       // regional row untouched by global-only brands…
       expect(d.providers.find(p => p.name === 'Hulu')).toBeUndefined();
       // …but the logos map covers them, normalized (Disney Plus → Disney+)
-      expect(d.logos['Hulu']).toBe('https://image.tmdb.org/t/p/w92/hulu.jpg');
-      expect(d.logos['Disney+']).toBe('https://image.tmdb.org/t/p/w92/dp.jpg');
-      expect(d.logos['Netflix']).toBe('https://image.tmdb.org/t/p/w92/nf.jpg');
+      expect(d.logos['Hulu']).toBe('https://image.tmdb.org/t/p/w154/hulu.jpg');
+      expect(d.logos['Disney+']).toBe('https://image.tmdb.org/t/p/w154/dp.jpg');
+      expect(d.logos['Netflix']).toBe('https://image.tmdb.org/t/p/w154/nf.jpg');
       // parent-brand logo beats the channel bundle's mark
-      expect(d.logos['Max']).toBe('https://image.tmdb.org/t/p/w92/max.jpg');
+      expect(d.logos['Max']).toBe('https://image.tmdb.org/t/p/w154/max.jpg');
     } finally { vi.unstubAllGlobals(); }
   });
 

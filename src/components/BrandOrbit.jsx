@@ -26,7 +26,13 @@ export default function BrandOrbit({ className = '' }) {
           </div>
         </div>
       ))}
-      <div className="hero-center"><IconPlay filled /></div>
+      <div className="hero-center">
+        <svg viewBox="0 0 512 512" fill="none" aria-hidden="true">
+          <rect x="131" y="131" width="172" height="172" rx="44" fill="none" stroke="currentColor" strokeWidth="32" />
+          <rect x="209" y="209" width="172" height="172" rx="44" fill="none" stroke="currentColor" strokeWidth="32" />
+          <rect x="213" y="213" width="86" height="86" rx="22" fill="currentColor" />
+        </svg>
+      </div>
     </div>
   );
 }

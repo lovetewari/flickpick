@@ -11,7 +11,7 @@ import Modal from '@/components/Modal';
 import TrendingStrip from '@/components/TrendingStrip';
 import BrandOrbit from '@/components/BrandOrbit';
 import { getTrending } from '@/lib/trending';
-import { IconBrand, BrandLogo, IconHeart, IconUsers, IconTrophy, IconArrowRight, IconGoogle } from '@/components/Icons';
+import { IconBrand, IconHeart, IconUsers, IconTrophy, IconArrowRight, IconGoogle } from '@/components/Icons';
 
 const FEATURES = [
   { Ic: IconUsers, glyph: '#4aa3ff', title: 'Host a room', desc: 'Create a room, share one link — friends join from any device in seconds.' },
@@ -155,7 +155,7 @@ export default function Home() {
       {/* ── How it works ── */}
       <section id="features" className="relative z-10 max-w-content mx-auto px-6 py-16 sm:py-24">
         <div className="text-center mb-10">
-          <div className="flex justify-center mb-5"><BrandLogo height={72} /></div>
+          <div className="flex justify-center mb-5"><IconBrand size={64} framed /></div>
           <h2 className="text-white text-[30px] sm:text-[40px] font-bold tracking-tight">Movie night, decided.</h2>
           <p className="text-white/50 text-[15px] sm:text-[17px] mt-2">One room, 2–12 friends, one perfect match.</p>
         </div>

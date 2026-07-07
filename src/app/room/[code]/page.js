@@ -48,14 +48,14 @@ export default function RoomPage() {
   useEffect(() => {
     let on = true;
     try {
-      const c = JSON.parse(sessionStorage.getItem('fp_platforms_v2') || 'null');
+      const c = JSON.parse(sessionStorage.getItem('fp_platforms_v3') || 'null');
       if (c?.t && Date.now() - c.t < 86400000 && c.providers?.length) { setProvData(c); return; }
     } catch {}
     fetch('/api/providers').then(r => r.json()).then(d => {
       if (!on || !d?.providers?.length) return;
       const next = { providers: d.providers, logos: d.logos || {} };
       setProvData(next);
-      try { sessionStorage.setItem('fp_platforms_v2', JSON.stringify({ t: Date.now(), ...next })); } catch {}
+      try { sessionStorage.setItem('fp_platforms_v3', JSON.stringify({ t: Date.now(), ...next })); } catch {}
     }).catch(() => {});
     return () => { on = false; };
   }, []);

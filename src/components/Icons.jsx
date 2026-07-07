@@ -5,71 +5,84 @@ const base = (size) => ({
   stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round',
 });
 
-// Compact FlickPick mark from the brand draft: warm-gradient play flag with a
-// white play triangle. Self-colored — works on dark and light backgrounds.
+// FlickPick mark: two overlapping card frames whose solid core IS the match —
+// "two picks, one agreement." Not a play, check, or screen. Outlined frames
+// stay legible at every size (fills vanish when small); the filled core is
+// what reads it as a match, not a generic copy icon. One shape set, white on
+// the gradient tile (framed) or straight on a dark header (unframed).
+function OverlapMark() {
+  return (
+    <>
+      <rect x="131" y="131" width="172" height="172" rx="44" fill="none" stroke="#FFFFFF" strokeWidth="32" />
+      <rect x="209" y="209" width="172" height="172" rx="44" fill="none" stroke="#FFFFFF" strokeWidth="32" />
+      <rect x="213" y="213" width="86" height="86" rx="22" fill="#FFFFFF" />
+    </>
+  );
+}
+
 export function IconBrand({ size = 22, framed = false }) {
   if (framed) {
     return (
-      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <svg width={size} height={size} viewBox="0 0 512 512" fill="none" aria-hidden="true">
         <defs>
-          <linearGradient id="fp-brand-tile-g" x1="7" y1="5" x2="57" y2="59" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#FFB020" />
-            <stop offset="0.5" stopColor="#FF375F" />
+          <linearGradient id="fp-tile-g" x1="40" y1="20" x2="472" y2="492" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#FF9F0A" />
+            <stop offset="0.52" stopColor="#FF375F" />
             <stop offset="1" stopColor="#BF5AF2" />
           </linearGradient>
-          <radialGradient id="fp-brand-tile-hi" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(18 12) rotate(53) scale(54)">
-            <stop stopColor="#FFFFFF" stopOpacity="0.36" />
-            <stop offset="0.48" stopColor="#FFFFFF" stopOpacity="0.08" />
+          <radialGradient id="fp-tile-hi" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(150 96) rotate(52) scale(430)">
+            <stop stopColor="#FFFFFF" stopOpacity="0.24" />
+            <stop offset="0.5" stopColor="#FFFFFF" stopOpacity="0.05" />
             <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
           </radialGradient>
         </defs>
-        <rect x="1.5" y="1.5" width="61" height="61" rx="16" fill="url(#fp-brand-tile-g)" />
-        <rect x="1.5" y="1.5" width="61" height="61" rx="16" fill="url(#fp-brand-tile-hi)" />
-        <rect x="1.5" y="1.5" width="61" height="61" rx="16" stroke="rgba(255,255,255,.42)" />
-        <path d="M21 14.8 48.1 28.9c2.4 1.25 2.4 4.95 0 6.2L21 49.2c-2.3 1.2-5-.45-5-3.08V17.88c0-2.63 2.7-4.28 5-3.08Z" fill="rgba(255,255,255,.96)" />
-        <path d="M29 25.2 41.7 32 29 38.8Z" fill="#1A1022" opacity="0.92" />
+        <rect x="6" y="6" width="500" height="500" rx="115" fill="url(#fp-tile-g)" />
+        <rect x="6" y="6" width="500" height="500" rx="115" fill="url(#fp-tile-hi)" />
+        <rect x="6.5" y="6.5" width="499" height="499" rx="114.5" stroke="#FFFFFF" strokeOpacity="0.28" />
+        <OverlapMark />
       </svg>
     );
   }
 
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="fp-brand-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#FF9F0A" />
-          <stop offset="0.55" stopColor="#FF375F" />
-          <stop offset="1" stopColor="#BF5AF2" />
-        </linearGradient>
-      </defs>
-      <path d="M5.6 2.6 20 10.2c1.5.8 1.5 2.8 0 3.6L5.6 21.4C4.3 22.1 3 21.2 3 19.8V4.2c0-1.4 1.3-2.3 2.6-1.6Z" fill="url(#fp-brand-g)" />
-      <path d="M9.5 8.8l6.2 3.2-6.2 3.2Z" fill="#fff" />
+    <svg width={size} height={size} viewBox="0 0 512 512" fill="none" aria-hidden="true">
+      <OverlapMark />
     </svg>
   );
 }
 
-// Full brand lockup from the shared draft: gradient play flag + friends on a
-// couch watching a screen. For hero/marketing moments (≥ 60px tall).
+// Brand lockup: the icon tile + "FlickPick" wordmark. Minimal, premium —
+// replaces the old couch illustration. Scales from the given `height`.
 export function BrandLogo({ height = 84 }) {
   return (
-    <svg height={height} viewBox="0 0 126 86" fill="none" role="img" aria-label="FlickPick — watch together, pick together">
-      <defs>
-        <linearGradient id="fp-flag-g" x1="0" y1="0" x2="0.9" y2="1">
-          <stop offset="0" stopColor="#FF9F0A" />
-          <stop offset="0.5" stopColor="#FF375F" />
-          <stop offset="1" stopColor="#D944C8" />
-        </linearGradient>
-      </defs>
-      <path d="M9.5 4.5 40 12v62L9.5 81.5C6.5 82.2 4 80 4 77V9c0-3 2.5-5.2 5.5-4.5Z" fill="url(#fp-flag-g)" />
-      <path d="M19 33l15 9-15 9Z" fill="#fff" />
-      <rect x="38" y="12" width="84" height="56" rx="11" fill="#151329" stroke="#fff" strokeWidth="3.2" />
-      <circle cx="64" cy="44" r="7" fill="#FF4E6A" />
-      <path d="M53.5 60c0-5.6 4.7-8.6 10.5-8.6S74.5 54.4 74.5 60Z" fill="#FF4E6A" />
-      <circle cx="80" cy="40" r="8" fill="#FF9F0A" />
-      <path d="M68.5 60c0-6.4 5.2-9.6 11.5-9.6S91.5 53.6 91.5 60Z" fill="#FF9F0A" />
-      <circle cx="96" cy="44" r="7" fill="#A855F7" />
-      <path d="M85.5 60c0-5.6 4.7-8.6 10.5-8.6s10.5 3 10.5 8.6Z" fill="#A855F7" />
-      <path d="M42 58h76c4.4 0 7 2.8 7 7v5c0 5-3.4 8.5-8.5 8.5h-73C38.4 78.5 35 75 35 70v-5c0-4.2 2.6-7 7-7Z" fill="#151329" stroke="#fff" strokeWidth="3.2" />
-    </svg>
+    <span
+      role="img"
+      aria-label="FlickPick"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: `${height * 0.24}px`, lineHeight: 1 }}
+    >
+      <IconBrand size={height} framed />
+      <span
+        style={{
+          fontFamily: 'var(--font-display), -apple-system, system-ui, sans-serif',
+          fontWeight: 700,
+          fontSize: `${height * 0.62}px`,
+          letterSpacing: '-0.02em',
+          color: '#fff',
+        }}
+      >
+        Flick
+        <span
+          style={{
+            background: 'linear-gradient(120deg,#FF9F0A,#FF375F 55%,#BF5AF2)',
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            color: 'transparent',
+          }}
+        >
+          Pick
+        </span>
+      </span>
+    </span>
   );
 }
 

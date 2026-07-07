@@ -5,7 +5,9 @@ import { isValidLogoUrl, normProvider } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
-const LOGO = 'https://image.tmdb.org/t/p/w92';
+// w154 keeps wordmark logos (JioHotstar, SonyLIV) legible on retina screens —
+// w92 blurred at the 52px display size the landing row uses.
+const LOGO = 'https://image.tmdb.org/t/p/w154';
 const REGION = 'IN';
 // Show the household names first, whatever the region ranking says.
 const PREFERRED = ['Netflix', 'Prime Video', 'Hotstar', 'Disney+', 'Apple TV+', 'Max', 'JioCinema', 'SonyLIV', 'ZEE5', 'Hulu', 'Paramount+', 'Peacock'];

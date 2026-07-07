@@ -65,7 +65,14 @@
       "Read(//tmp/**)",
       "Bash(cat > *)",
       "Bash(awk '/@media.*\\\\\\(max-width.*640px\\\\\\)|@media.*\\\\\\(max-width.*639px\\\\\\)|@media.*sm:/{found=1} found{print NR\": \"$0; if\\(/^}/\\) {found=0}}' /Users/lovetewari/flickpick/src/app/globals.css)",
-      "Bash(awk 'NR>=1550 && NR<=1660 {print NR\": \"$0}' /Users/lovetewari/flickpick/src/app/globals.css)"
+      "Bash(awk 'NR>=1550 && NR<=1660 {print NR\": \"$0}' /Users/lovetewari/flickpick/src/app/globals.css)",
+      "Bash(sed -i '' 's/fp_platforms_v2/fp_platforms_v3/g' \"src/app/room/[code]/page.js\" && grep -c \"fp_platforms_v3\" \"src/app/room/[code]/page.js\")",
+      "Bash(curl -s http://localhost:3000/icon.svg)",
+      "Bash(curl -s http://localhost:3000/icon-maskable.svg)",
+      "Bash(curl -s http://localhost:3000/manifest.webmanifest)",
+      "Bash(python3 -c \"import json,sys; print\\(json.load\\(sys.stdin\\)['icons']\\)\")",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)"
     ]
   }
 }

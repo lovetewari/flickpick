@@ -132,7 +132,10 @@ export default function TrendingStrip({ state, items, onRetry }) {
                 onClick={() => setSelected(it)}
                 style={{ '--rank-index': i }}
               >
-                <span className={`rank-badge ${i < 3 ? 'rank-badge-top' : ''}`} aria-label={`Rank ${it.rank || i + 1}`}>
+                <span
+                  className={`rank-num ${i < 3 ? 'rank-num-top' : ''} ${(it.rank || i + 1) > 9 ? 'rank-num-2d' : ''}`}
+                  aria-label={`Rank ${it.rank || i + 1}`}
+                >
                   {it.rank || i + 1}
                 </span>
                 <Image
