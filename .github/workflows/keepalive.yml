@@ -1,6 +1,15 @@
-# Backup keep-alive: pings Supabase directly every 3 days so the free-tier
-# project never pauses, even if the Vercel deployment is down.
-# Required repo secrets: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+# Backup keep-alive. The PRIMARY keep-alive is a Vercel Cron (see vercel.json)
+# that hits /api/keepalive daily. This Action is a second, independent
+# scheduler in case a Vercel Hobby cron is skipped — it pings the SAME public
+# endpoint, which runs the real authenticated Supabase query server-side.
+#
+# It deliberately needs NO GitHub secrets: the old version pinged Supabase
+# directly and failed with exit 22 whenever the anon-key secret was unset
+# (empty apikey header → 401). Hitting the deployed endpoint can't break that
+# way and also keeps the deployment warm.
+#
+# Override the URL only if your deploy URL differs: repo → Settings → Secrets
+# and variables → Actions → Variables → new variable APP_URL.
 name: Keep Supabase awake
 
 on:
@@ -13,11 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Ping Supabase REST API
+      - name: Ping the deployed keep-alive endpoint
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://flickpick-three.vercel.app' }}
         run: |
-          curl -sf \
-            "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/catalog?select=id&limit=1" \
-            -H "apikey: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
-            -o /dev/null
-          echo "Supabase pinged successfully"
+          echo "Pinging $APP_URL/api/keepalive"
+          body="$(curl -sS --max-time 30 --retry 2 --retry-delay 5 "$APP_URL/api/keepalive")" || {
+            echo "::error::could not reach $APP_URL/api/keepalive"; exit 1;
+          }
+          echo "Response: $body"
+          case "$body" in
+            *'"ok":true'*) echo "Supabase kept awake ✅" ;;
+            *) echo "::error::keep-alive did not report ok:true — Supabase may be paused or the URL is wrong"; exit 1 ;;
+          esac
